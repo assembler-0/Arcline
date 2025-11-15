@@ -59,6 +59,8 @@ hang:
 // Put stack in .data section so it's available immediately
 .section ".data"
 .align 16  // Ensure 16-byte alignment for aarch64
+.global stack_bottom
+.global _stack_top
 stack_bottom:
     .space 16384 // Reserve 16KB for the boot stack
 _stack_top:

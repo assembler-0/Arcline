@@ -34,8 +34,7 @@ set(KERNEL_LOAD_ADDR "0x40080000" CACHE STRING "Kernel load/entry address (e.g.,
 set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined -Wl,-defsym=KERNEL_LOAD_ADDR=${KERNEL_LOAD_ADDR}")
 
 # --- Executable ---
-add_executable(arcline.elf ""
-        include/stdarg.h) # No sources here, they are added by subdirectories
+add_executable(arcline.elf "") # No sources here, they are added by subdirectories
 
 target_include_directories(arcline.elf PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
