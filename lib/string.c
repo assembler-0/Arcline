@@ -24,7 +24,7 @@ int strlen(const char* str) {
 }
 
 int strnlen(const char* str, const size_t max) {
-    int len = 0;
+    size_t len = 0;
     while (len < max && str[len]) len++;
     return len;
 }

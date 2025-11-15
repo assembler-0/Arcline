@@ -64,11 +64,13 @@ int mmu_map_page(uint64_t *pgd, uint64_t va, uint64_t pa, uint64_t attrs) {
     // L3 entry
     idx = pte_index(va);
     pte[idx] = (pa & ~MMU_PAGE_MASK) | attrs | PTE_AF | PTE_VALID;
+    
+    __asm__ volatile("dsb ishst" ::: "memory");
     return 0;
 }
 
 void mmu_init(void) {
-    extern char _kernel_start[], _kernel_end[];
+    extern char _kernel_start[], _kernel_end[], stack_bottom[], _stack_top[];
     
     ttbr0_pgd = alloc_table();
     ttbr1_pgd = alloc_table();
@@ -79,6 +81,8 @@ void mmu_init(void) {
 
     uint64_t kstart = (uint64_t)_kernel_start & ~MMU_PAGE_MASK;
     uint64_t kend = ((uint64_t)_kernel_end + MMU_PAGE_MASK) & ~MMU_PAGE_MASK;
+    uint64_t stack_start = (uint64_t)stack_bottom & ~MMU_PAGE_MASK;
+    uint64_t stack_end = ((uint64_t)_stack_top + MMU_PAGE_MASK) & ~MMU_PAGE_MASK;
     uint64_t attrs = PTE_PAGE | PTE_SH_INNER | PTE_ATTR_IDX(MAIR_IDX_NORMAL);
     
     // TTBR0: Identity map first 2GB
@@ -89,20 +93,30 @@ void mmu_init(void) {
     // TTBR1: Map kernel to higher-half
     uint64_t virt_base = vmm_kernel_base();
     for (uint64_t pa = kstart; pa < kend; pa += MMU_PAGE_SIZE) {
-        uint64_t va = virt_base + (pa - kstart);
+        uint64_t va = virt_base + pa;
         if (mmu_map_page(ttbr1_pgd, va, pa, attrs) < 0) {
             printk("MMU: failed to map kernel page %p\n", (void*)pa);
+            return;
+        }
+    }
+    
+    // Map stack to higher-half
+    for (uint64_t pa = stack_start; pa < stack_end; pa += MMU_PAGE_SIZE) {
+        uint64_t va = virt_base + pa;
+        if (mmu_map_page(ttbr1_pgd, va, pa, attrs) < 0) {
+            printk("MMU: failed to map stack page %p\n", (void*)pa);
             return;
         }
     }
 
     printk("MMU: TTBR0=%p TTBR1=%p\n", ttbr0_pgd, ttbr1_pgd);
     printk("MMU: kernel mapped %p-%p -> %p-%p\n", 
-           (void*)virt_base, (void*)(virt_base + (kend - kstart)),
-           (void*)kstart, (void*)kend);
+           (void*)virt_base, (void*)(virt_base + kend),
+           (void*)0ULL, (void*)kend);
 }
 
 void mmu_enable(void) {
+    
     uint64_t mair = (MAIR_DEVICE_nGnRnE << (8 * MAIR_IDX_DEVICE)) |
                     (MAIR_NORMAL_NC << (8 * MAIR_IDX_NORMAL_NC)) |
                     (MAIR_NORMAL << (8 * MAIR_IDX_NORMAL));
@@ -146,8 +160,7 @@ uint64_t mmu_get_ttbr1(void) {
 }
 
 void mmu_switch_to_higher_half(void) {
-    extern char _kernel_start[], _stack_top[];
-    uint64_t offset = vmm_kernel_base() - (uint64_t)_kernel_start;
+    uint64_t offset = vmm_kernel_base();
     
     __asm__ volatile(
         "adr x0, 1f\n"
@@ -176,5 +189,55 @@ int mmu_map_region(uint64_t pa, uint64_t size, uint64_t attrs) {
             return -1;
         }
     }
+    tlb_flush_range(va_base + pa_aligned, size_aligned);
+    return 0;
+}
+
+int mmu_unmap_page(uint64_t *pgd, uint64_t va) {
+    int idx;
+    uint64_t *pud, *pmd, *pte;
+    
+    idx = pgd_index(va);
+    if (!(pgd[idx] & PTE_VALID)) return -1;
+    pud = (uint64_t*)(pgd[idx] & ~0xFFFULL);
+    
+    idx = pud_index(va);
+    if (!(pud[idx] & PTE_VALID)) return -1;
+    pmd = (uint64_t*)(pud[idx] & ~0xFFFULL);
+    
+    idx = pmd_index(va);
+    if (!(pmd[idx] & PTE_VALID)) return -1;
+    pte = (uint64_t*)(pmd[idx] & ~0xFFFULL);
+    
+    idx = pte_index(va);
+    if (!(pte[idx] & PTE_VALID)) return -1;
+    
+    pte[idx] = 0;
+    __asm__ volatile("dsb ishst" ::: "memory");
+    return 0;
+}
+
+int mmu_update_page_attrs(uint64_t *pgd, uint64_t va, uint64_t attrs) {
+    int idx;
+    uint64_t *pud, *pmd, *pte;
+    
+    idx = pgd_index(va);
+    if (!(pgd[idx] & PTE_VALID)) return -1;
+    pud = (uint64_t*)(pgd[idx] & ~0xFFFULL);
+    
+    idx = pud_index(va);
+    if (!(pud[idx] & PTE_VALID)) return -1;
+    pmd = (uint64_t*)(pud[idx] & ~0xFFFULL);
+    
+    idx = pmd_index(va);
+    if (!(pmd[idx] & PTE_VALID)) return -1;
+    pte = (uint64_t*)(pmd[idx] & ~0xFFFULL);
+    
+    idx = pte_index(va);
+    if (!(pte[idx] & PTE_VALID)) return -1;
+    
+    uint64_t pa = pte[idx] & ~0xFFFULL;
+    pte[idx] = pa | attrs | PTE_AF | PTE_VALID;
+    __asm__ volatile("dsb ishst" ::: "memory");
     return 0;
 }

@@ -14,6 +14,8 @@ void kmain(void) {
     printk("%s\n",KERNEL_COPYRIGHT);
     printk("build %s\n", KERNEL_BUILD_DATE);
 
+    printk("[-- STARTING INIT --]\n");
+
     // Initialize and dump DTB info
     dtb_init();
     dtb_dump_info();
@@ -44,7 +46,7 @@ void kmain(void) {
     mmu_init();
     mmu_enable();
     mmu_switch_to_higher_half();
-
+    
     // Map all available physical memory to higher-half
     uint64_t mem_size = pmm_total_pages() * 4096;
     uint64_t attrs = PTE_PAGE | PTE_SH_INNER | PTE_ATTR_IDX(MAIR_IDX_NORMAL);
@@ -52,17 +54,8 @@ void kmain(void) {
         printk("MMU: mapped %d MiB physical memory to higher-half\n", (int)(mem_size / (1024*1024)));
     }
 
-    printk("MMU: TTBR0=%p TTBR1=%p\n", (void*)mmu_get_ttbr0(), (void*)mmu_get_ttbr1());
-    
-    // Test higher-half mapping
-    void *test_page = pmm_alloc_page();
-    if (test_page) {
-        uint64_t test_va = vmm_kernel_base() + 0x10000000ULL;
-        if (vmm_map(test_va, (uint64_t)test_page, 4096, VMM_ATTR_R | VMM_ATTR_W | VMM_ATTR_NORMAL) == 0) {
-            printk("VMM: test mapping VA=%p -> PA=%p\n", (void*)test_va, test_page);
-        }
-    }
-    
+    printk("[-- INIT DONE --]\n");
+
     vmm_dump();
 
     // Loop forever

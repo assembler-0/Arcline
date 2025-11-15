@@ -213,10 +213,18 @@ int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
         if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
         else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
         if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
         
         for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
             mmu_map_page((uint64_t*)ttbr1, va + off, pa + off, pte_attrs);
         }
+        
+        if (attrs & VMM_ATTR_X) {
+            cache_flush_range(va, size);
+            icache_invalidate_range(va, size);
+        }
+        tlb_flush_range(va, size);
     }
     return 0;
 }
@@ -224,18 +232,24 @@ int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
 int vmm_unmap(uint64_t va, uint64_t size) {
     if (size == 0) return -1;
     if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    // For initial implementation, require exact match of an existing VMA
     vma_node_t *cur = vma_root;
     while (cur) {
         if (va < cur->va) cur = cur->left;
         else if (va > cur->va) cur = cur->right;
         else break;
     }
-    if (!cur || cur->size != size) return -3; // not found or size mismatch
+    if (!cur || cur->size != size) return -3;
+
+    uint64_t ttbr1 = mmu_get_ttbr1();
+    if (ttbr1) {
+        for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
+            mmu_unmap_page((uint64_t*)ttbr1, va + off);
+        }
+        tlb_flush_range(va, size);
+    }
 
     rb_delete(&vma_root, cur);
     vma_free_node(cur);
-    // TLB maintenance would go here in the future
     return 0;
 }
 
@@ -250,7 +264,21 @@ int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs) {
     }
     if (!cur || cur->size != size) return -3;
     cur->attrs = attrs;
-    // Future: update page table entries' attributes
+    
+    uint64_t ttbr1 = mmu_get_ttbr1();
+    if (ttbr1) {
+        uint64_t pte_attrs = PTE_PAGE | PTE_AF | PTE_SH_INNER;
+        if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
+        else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+        if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
+        
+        for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
+            mmu_update_page_attrs((uint64_t*)ttbr1, va + off, pte_attrs);
+        }
+        tlb_flush_range(va, size);
+    }
     return 0;
 }
 

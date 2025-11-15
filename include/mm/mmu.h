@@ -12,6 +12,8 @@
 #define PTE_RO          (1ULL << 7)  // AP[2] - read-only
 #define PTE_SH_INNER    (3ULL << 8)  // Inner shareable
 #define PTE_ATTR_IDX(x) ((uint64_t)(x) << 2) // MAIR index
+#define PTE_PXN         (1ULL << 53) // Privileged eXecute-Never
+#define PTE_UXN         (1ULL << 54) // Unprivileged eXecute-Never
 
 // Memory attribute indices (for MAIR_EL1)
 #define MAIR_DEVICE_nGnRnE  0x00ULL
@@ -48,5 +50,24 @@ uint64_t mmu_get_ttbr1(void);
 
 // Map physical memory region to higher-half
 int mmu_map_region(uint64_t pa, uint64_t size, uint64_t attrs);
+
+// Unmap a page from page tables
+int mmu_unmap_page(uint64_t *pgd, uint64_t va);
+
+// Update page permissions
+int mmu_update_page_attrs(uint64_t *pgd, uint64_t va, uint64_t attrs);
+
+// TLB maintenance
+void tlb_flush_all(void);
+void tlb_flush_page(uint64_t va);
+void tlb_flush_range(uint64_t va, uint64_t size);
+
+// Cache maintenance
+void cache_flush_range(uint64_t va, uint64_t size);
+void icache_invalidate_range(uint64_t va, uint64_t size);
+
+// Exception handling
+void exception_init(void);
+void handle_sync_exception(void);
 
 #endif // ARCLINE_MM_MMU_H
