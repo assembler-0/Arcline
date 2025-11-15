@@ -1,3 +1,2 @@
-target_sources(arcline.elf PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/boot.S
-)
+file(GLOB BOOT_SOURCES "*.S")
+target_sources(arcline.elf PRIVATE ${BOOT_SOURCES})
