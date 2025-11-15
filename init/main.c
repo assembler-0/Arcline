@@ -5,6 +5,8 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/mmu.h>
+#include <mm/vmalloc.h>
+#include <string.h>
 
 void kmain(void) {
     serial_init();
