@@ -26,7 +26,7 @@ set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT}
 add_executable(arcline.elf "") # No sources here, they are added by subdirectories
 
 target_include_directories(arcline.elf PUBLIC
-    .
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/arch/arm64/include
 )
@@ -45,4 +45,17 @@ add_custom_command(
     TARGET arcline.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary arcline.elf arcline.bin
     COMMENT "Creating kernel binary: arcline.bin"
+)
+
+# --- Custom run target ---
+add_custom_target(run
+    COMMAND qemu-system-aarch64
+            -M virt
+            -dtb ${CMAKE_CURRENT_SOURCE_DIR}/dtb/virt.dtb
+            -cpu cortex-a57
+            -serial stdio
+            -kernel ${CMAKE_BINARY_DIR}/arcline.bin
+            -m 1024
+    DEPENDS arcline.elf
+    COMMENT "Running Arcline in QEMU"
 )

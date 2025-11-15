@@ -64,3 +64,23 @@ void serial_puts(const char *s) {
         serial_putc(*s++);
     }
 }
+
+void serial_print_hex(uint64_t val) {
+    char buf[20];
+    char *p = buf + sizeof(buf) - 1;
+    *p = '\0';
+
+    if (val == 0) {
+        serial_puts("0x0");
+        return;
+    }
+
+    while (val > 0) {
+        int digit = val & 0xF;
+        *--p = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+        val >>= 4;
+    }
+
+    serial_puts("0x");
+    serial_puts(p);
+}

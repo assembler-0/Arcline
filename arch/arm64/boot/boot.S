@@ -13,12 +13,20 @@
 .global _start
 
 _start:
+    // Save DTB pointer (passed in x0 by bootloader/QEMU)
+    ldr x1, =dtb_ptr
+    str x0, [x1]
+    
+    // Also save original x0 for debugging
+    ldr x1, =boot_x0
+    str x0, [x1]
+
     // Check if we're the primary CPU (MPIDR_EL1 & 0xFF should be 0)
     mrs x0, mpidr_el1
     and x0, x0, #0xFF
     cbnz x0, hang  // If not CPU 0, hang
 
-    // Set up the stack pointer (use a fixed address for now)
+    // Set up the stack pointer
     ldr x0, =_stack_top
     mov sp, x0
 
@@ -51,3 +59,13 @@ hang:
 stack_bottom:
     .space 16384 // Reserve 16KB for the boot stack
 _stack_top:
+
+// Global variable to store DTB pointer
+.global dtb_ptr
+dtb_ptr:
+    .quad 0
+
+// Debug variable to store original x0
+.global boot_x0
+boot_x0:
+    .quad 0
