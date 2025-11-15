@@ -141,8 +141,8 @@ int dtb_get_stdout_uart_base(uint64_t *out_base) {
 
     // First pass: collect stdout-path and aliases
     int depth = 0;
-    const char *chosen_path = "/chosen";
-    const char *aliases_path = "/aliases";
+    // const char *chosen_path = "/chosen";
+    // const char *aliases_path = "/aliases";
 
     uint32_t p = off_struct;
     while (1) {

@@ -1,6 +1,7 @@
-// Minimal VMM with RB-tree VMA manager; page tables/MMU not enabled yet.
+// Minimal VMM with RB-tree VMA manager
 
 #include <mm/vmm.h>
+#include <mm/mmu.h>
 #include <kernel/printk.h>
 #include <stdint.h>
 
@@ -178,20 +179,17 @@ int vmm_init(void) {
 
 int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
     if (size == 0) return -1;
-    if ((va & (VMM_PAGE_SIZE-1)) || (pa & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2; // alignment
-    // Check for overlaps: predecessor and its successor
+    if ((va & (VMM_PAGE_SIZE-1)) || (pa & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
     vma_node_t *pred = find_le(vma_root, va);
     if (overlaps(pred, va, size)) return -3;
     vma_node_t *succ = pred;
-    // find next greater node
-    if (succ) { // successor is minimal node with va > input
+    if (succ) {
         vma_node_t *cur = vma_root; vma_node_t *best = NULL;
         while (cur) {
             if (cur->va > va) { best = cur; cur = cur->left; } else cur = cur->right;
         }
         succ = best;
     } else {
-        // pred is NULL; check tree min as successor
         succ = tree_min(vma_root);
     }
     if (overlaps(succ, va, size)) return -3;
@@ -200,7 +198,6 @@ int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
     if (!n) return -4;
     n->va = va; n->pa = pa; n->size = size; n->attrs = attrs; n->color = RB_RED;
 
-    // BST insert
     vma_node_t **link = &vma_root; vma_node_t *parent = NULL;
     while (*link) {
         parent = *link;
@@ -209,25 +206,50 @@ int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
     *link = n; n->parent = parent; n->left = n->right = NULL; n->color = RB_RED;
     insert_fixup(&vma_root, n);
 
-    // Note: page-table programming will be added later when MMU is enabled.
+    // Map pages in MMU if TTBR1 is set
+    uint64_t ttbr1 = mmu_get_ttbr1();
+    if (ttbr1) {
+        uint64_t pte_attrs = PTE_PAGE | PTE_AF | PTE_SH_INNER;
+        if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
+        else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+        if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
+        
+        for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
+            mmu_map_page((uint64_t*)ttbr1, va + off, pa + off, pte_attrs);
+        }
+        
+        if (attrs & VMM_ATTR_X) {
+            cache_flush_range(va, size);
+            icache_invalidate_range(va, size);
+        }
+        tlb_flush_range(va, size);
+    }
     return 0;
 }
 
 int vmm_unmap(uint64_t va, uint64_t size) {
     if (size == 0) return -1;
     if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    // For initial implementation, require exact match of an existing VMA
     vma_node_t *cur = vma_root;
     while (cur) {
         if (va < cur->va) cur = cur->left;
         else if (va > cur->va) cur = cur->right;
         else break;
     }
-    if (!cur || cur->size != size) return -3; // not found or size mismatch
+    if (!cur || cur->size != size) return -3;
+
+    uint64_t ttbr1 = mmu_get_ttbr1();
+    if (ttbr1) {
+        for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
+            mmu_unmap_page((uint64_t*)ttbr1, va + off);
+        }
+        tlb_flush_range(va, size);
+    }
 
     rb_delete(&vma_root, cur);
     vma_free_node(cur);
-    // TLB maintenance would go here in the future
     return 0;
 }
 
@@ -242,7 +264,21 @@ int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs) {
     }
     if (!cur || cur->size != size) return -3;
     cur->attrs = attrs;
-    // Future: update page table entries' attributes
+    
+    uint64_t ttbr1 = mmu_get_ttbr1();
+    if (ttbr1) {
+        uint64_t pte_attrs = PTE_PAGE | PTE_AF | PTE_SH_INNER;
+        if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
+        else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+        if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
+        
+        for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
+            mmu_update_page_attrs((uint64_t*)ttbr1, va + off, pte_attrs);
+        }
+        tlb_flush_range(va, size);
+    }
     return 0;
 }
 

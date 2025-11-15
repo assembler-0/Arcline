@@ -4,6 +4,7 @@
 #include <version.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <mm/mmu.h>
 
 void kmain(void) {
     serial_init();
@@ -12,6 +13,8 @@ void kmain(void) {
     printk("%s\n", KERNEL_NAME);
     printk("%s\n",KERNEL_COPYRIGHT);
     printk("build %s\n", KERNEL_BUILD_DATE);
+
+    printk("[-- STARTING INIT --]\n");
 
     // Initialize and dump DTB info
     dtb_init();
@@ -30,7 +33,7 @@ void kmain(void) {
         return;
     }
 
-    // Initialize VMM structures (RB-tree VMAs). MMU remains off for now.
+    // Initialize VMM structures (RB-tree VMAs)
     vmm_init_identity();
     if (vmm_init() == 0) {
         printk("VMM: initialized RB-tree manager\n");
@@ -39,10 +42,20 @@ void kmain(void) {
         return;
     }
 
-    // Log planned higher-half kernel base (MMU not enabled yet)
-    printk("VMM: configured higher-half base = %p (MMU off)\n", (void*)vmm_kernel_base());
+    // Initialize and enable MMU
+    mmu_init();
+    mmu_enable();
+    mmu_switch_to_higher_half();
+    
+    // Map all available physical memory to higher-half
+    uint64_t mem_size = pmm_total_pages() * 4096;
+    uint64_t attrs = PTE_PAGE | PTE_SH_INNER | PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+    if (mmu_map_region(0, mem_size, attrs) == 0) {
+        printk("MMU: mapped %d MiB physical memory to higher-half\n", (int)(mem_size / (1024*1024)));
+    }
 
-    // Dump VMAs (should be empty at this stage)
+    printk("[-- INIT DONE --]\n");
+
     vmm_dump();
 
     // Loop forever

@@ -64,16 +64,6 @@ Configured higher-half base
 - Build-time constant KERNEL_VIRT_BASE (default 0xFFFFFF8000000000 for 48-bit VA) is exposed to C as VMM_KERNEL_VIRT_BASE.
 - The helper vmm_kernel_base() returns this value. We only log it for now; enabling MMU and actually relocating the kernel there will come in the next step.
 
-Planned enablement steps (AArch64)
-
-1. Create kernel page tables rooted for TTBR1_EL1 at VMM_KERNEL_VIRT_BASE.
-   - Map kernel image sections with correct attributes (Normal, RO+X for text; RW+PXN for data).
-   - Map DTB and required device MMIO (UART) with Device-nGnRE.
-2. Create a minimal TTBR0_EL1 table providing a small identity window over RAM/MMIO as needed.
-3. Program MAIR_EL1, TCR_EL1 (split between TTBR0/1), TTBR0/1, SCTLR_EL1; then enable the MMU.
-4. Switch stack pointers and exception vectors to higher-half addresses; retain identity window temporarily.
-5. Optionally drop or shrink the identity window once stable.
-
 API summary
 - vmm_init(): initialize the VMA tree (no MMU changes yet).
 - vmm_map(va, pa, size, attrs): add a page-aligned mapping to the RB-tree; fails on overlap.
