@@ -7,13 +7,13 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Start at 1MB, a common physical address for kernels. */
-    . = 0x100000;
+    /* Start at 1MB for QEMU virt machine */
+    . = 0x40000000;
     _kernel_start = .;
 
     .text : ALIGN(4K)
     {
-        KEEP(*(.text.boot)) /* Keep the entry point */
+        KEEP(*(.text.boot)) /* Keep the entry point first */
         *(.text .text.*)
     }
 
@@ -29,19 +29,20 @@ SECTIONS
 
     .bss : ALIGN(4K)
     {
-        __bss_start = .; /* Symbol for clearing BSS */
+        __bss_start = .;
         *(.bss .bss.*)
         *(COMMON)
-        __bss_end = .; /* Symbol for clearing BSS */
+        __bss_end = .;
     }
 
     _kernel_end = .;
 
-    /* Discard unnecessary sections to reduce binary size. */
+    /* Discard unnecessary sections */
     /DISCARD/ :
     {
         *(.comment)
         *(.note*)
         *(.eh_frame*)
+        *(.ARM.exidx*)
     }
 }

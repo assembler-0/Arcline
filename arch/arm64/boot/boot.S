@@ -13,30 +13,41 @@
 .global _start
 
 _start:
-    // Set up the stack pointer for the primary core.
+    // Check if we're the primary CPU (MPIDR_EL1 & 0xFF should be 0)
+    mrs x0, mpidr_el1
+    and x0, x0, #0xFF
+    cbnz x0, hang  // If not CPU 0, hang
+
+    // Set up the stack pointer (use a fixed address for now)
     ldr x0, =_stack_top
     mov sp, x0
 
-    // Clear the BSS section before calling C code.
+    // Clear the BSS section before calling C code
     ldr x0, =__bss_start
     ldr x1, =__bss_end
-1:  // Local label 1
+    
+bss_clear_loop:
     cmp x0, x1
-    b.ge 2f // Branch to local label 2 forward
+    b.ge bss_clear_done
     str xzr, [x0], #8
-    b 1b // Branch to local label 1 backward
+    b bss_clear_loop
+    
+bss_clear_done:
+    // Ensure all memory operations complete
+    dsb sy
+    isb
 
-2:  // Local label 2
-    // Jump to the C entry point (kmain).
+    // Jump to the C entry point (kmain)
     bl kmain
 
-// If kmain ever returns, we enter a low-power halt loop.
+// If kmain ever returns, we enter a low-power halt loop
 hang:
     wfe  // Wait for event (low-power state)
     b hang
 
-.section ".bss"
-.align 4 // 16-byte alignment as required by AArch64 PCS
+// Put stack in .data section so it's available immediately
+.section ".data"
+.align 4
 stack_bottom:
     .space 16384 // Reserve 16KB for the boot stack
 _stack_top:
