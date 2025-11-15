@@ -66,8 +66,4 @@ void tlb_flush_range(uint64_t va, uint64_t size);
 void cache_flush_range(uint64_t va, uint64_t size);
 void icache_invalidate_range(uint64_t va, uint64_t size);
 
-// Exception handling
-void exception_init(void);
-void handle_sync_exception(void);
-
 #endif // ARCLINE_MM_MMU_H

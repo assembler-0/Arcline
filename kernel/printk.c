@@ -28,14 +28,8 @@ static int do_printf(output_func_t output, const char *fmt, va_list args) {
         if (*fmt == '%' && *(fmt + 1)) {
             fmt++;
             switch (*fmt) {
-                case 'd': {
-                    int val = va_arg(args, int);
-                    if (val < 0) {
-                        output('-');
-                        count++;
-                        val = -val;
-                    }
-
+                case 'u': {
+                    unsigned int val = va_arg(args, unsigned int);
                     char buf[12];
                     int i = 0;
                     if (val == 0) {
@@ -46,10 +40,77 @@ static int do_printf(output_func_t output, const char *fmt, va_list args) {
                             val /= 10;
                         }
                     }
-
                     while (i > 0) {
                         output(buf[--i]);
                         count++;
+                    }
+                    break;
+                }
+
+                case 'd': {
+                    int val = va_arg(args, int);
+                    if (val < 0) {
+                        output('-');
+                        count++;
+                        val = -val;
+                    }
+                    char buf[12];
+                    int i = 0;
+                    if (val == 0) {
+                        buf[i++] = '0';
+                    } else {
+                        while (val > 0) {
+                            buf[i++] = '0' + (val % 10);
+                            val /= 10;
+                        }
+                    }
+                    while (i > 0) {
+                        output(buf[--i]);
+                        count++;
+                    }
+                    break;
+                }
+
+                case 'l': {
+                    if (*(fmt + 1) == 'l' && *(fmt + 2) == 'u') {
+                        fmt += 2;
+                        uint64_t val = va_arg(args, uint64_t);
+                        char buf[24];
+                        int i = 0;
+                        if (val == 0) {
+                            buf[i++] = '0';
+                        } else {
+                            while (val > 0) {
+                                buf[i++] = '0' + (val % 10);
+                                val /= 10;
+                            }
+                        }
+                        while (i > 0) {
+                            output(buf[--i]);
+                            count++;
+                        }
+                    } else if (*(fmt + 1) == 'l' && *(fmt + 2) == 'd') {
+                        fmt += 2;
+                        int64_t val = va_arg(args, int64_t);
+                        if (val < 0) {
+                            output('-');
+                            count++;
+                            val = -val;
+                        }
+                        char buf[24];
+                        int i = 0;
+                        if (val == 0) {
+                            buf[i++] = '0';
+                        } else {
+                            while (val > 0) {
+                                buf[i++] = '0' + (val % 10);
+                                val /= 10;
+                            }
+                        }
+                        while (i > 0) {
+                            output(buf[--i]);
+                            count++;
+                        }
                     }
                     break;
                 }

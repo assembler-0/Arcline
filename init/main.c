@@ -5,8 +5,10 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/mmu.h>
-#include <mm/vmalloc.h>
-#include <string.h>
+#include <kernel/exception.h>
+#include <kernel/irq.h>
+#include <drivers/gic.h>
+#include <drivers/timer.h>
 
 void kmain(void) {
     serial_init();
@@ -16,8 +18,6 @@ void kmain(void) {
     printk("%s\n",KERNEL_COPYRIGHT);
     printk("build %s\n", KERNEL_BUILD_DATE);
 
-    printk("[-- STARTING INIT --]\n");
-
     // Initialize and dump DTB info
     dtb_init();
     dtb_dump_info();
@@ -25,7 +25,8 @@ void kmain(void) {
     // Initialize Physical Memory Manager from DTB and run a small smoke test
     pmm_init_from_dtb();
     printk("PMM: total=%d pages, free=%d pages (size=%d KiB)\n",
-           (int)pmm_total_pages(), (int)pmm_free_pages_count(), (int)(pmm_free_pages_count() * 4));
+           (int)pmm_total_pages(), (int)pmm_free_pages_count(),
+           (int)(pmm_free_pages_count() * 4));
 
     // Optional: consistency check
     if (pmm_check() == 0) {
@@ -53,12 +54,21 @@ void kmain(void) {
     uint64_t mem_size = pmm_total_pages() * 4096;
     uint64_t attrs = PTE_PAGE | PTE_SH_INNER | PTE_ATTR_IDX(MAIR_IDX_NORMAL);
     if (mmu_map_region(0, mem_size, attrs) == 0) {
-        printk("MMU: mapped %d MiB physical memory to higher-half\n", (int)(mem_size / (1024*1024)));
+        printk("MMU: mapped %d MiB physical memory to higher-half\n",
+            (int)(mem_size / (1024*1024)));
     }
 
-    printk("[-- INIT DONE --]\n");
+    // Initialize interrupt subsystem
+    irq_init();
+    gic_init();
+    timer_init(100);
 
+    // etc.
+    exception_init();
     vmm_dump();
+    
+    printk("\nIRQ: Enabling interrupts...\n");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
 
     // Loop forever
     while (1) {
