@@ -3,6 +3,7 @@
 #include <mm/pmm.h>
 #include <dtb.h>
 #include <kernel/printk.h>
+#include <string.h>
 
 #define PMM_MAX_PAGES 1048576ULL /* supports up to 4 GiB at 4 KiB pages */
 
@@ -68,7 +69,8 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
 
     uint32_t p = off_struct;
     int depth = 0;
-    int in_memory = 0;
+    int in_memory_node = 0;   // true when current node is a memory node
+    int device_type_memory = 0; // true if device_type=="memory" seen for current node
 
     while (1) {
         uint32_t token = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
@@ -77,14 +79,32 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
             size_t name_len = 0; while (name[name_len] != '\0') name_len++;
             p += (name_len + 4) & ~3u;
             depth++;
-            // Memory nodes often named "memory" or have device_type=memory; we handle simple name match here.
-            in_memory = (name_len == 6 && name[0]=='m'&&name[1]=='e'&&name[2]=='m'&&name[3]=='o'&&name[4]=='r'&&name[5]=='y');
+            // Memory nodes are typically named "memory" or "memory@..."
+            in_memory_node = (name_len >= 6 && strncmp(name, "memory", 6) == 0);
+            device_type_memory = 0; // reset when entering a node
         } else if (token == DTB_PROP) {
             uint32_t len = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
             uint32_t nameoff = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
             const char *pname = strings + nameoff;
             const uint8_t *pdata = fdt + p;
-            if (in_memory && pname[0]=='r'&&pname[1]=='e'&&pname[2]=='g'&&pname[3]=='\0') {
+            // Track device_type property
+            if (in_memory_node && pname[0]=='d'&&
+                pname[1]=='e'&&
+                pname[2]=='v'&&
+                pname[3]=='i'&&
+                pname[4]=='c'&&
+                pname[5]=='e'&&
+                pname[6]=='_'&&
+                pname[7]=='t'&&
+                pname[8]=='y'&&pname[9]=='p'&&
+                pname[10]=='e'&&pname[11]=='\0'
+                ) {
+                // pdata is a string like "memory\0"
+                if (len >= 6 && strncmp((const char*)pdata, "memory", 6) == 0) {
+                    device_type_memory = 1;
+                }
+            }
+            if (in_memory_node && pname[0]=='r'&&pname[1]=='e'&&pname[2]=='g'&&pname[3]=='\0') {
                 // Assume 64-bit address/size pairs if len >= 16; else 32-bit.
                 uint64_t base = 0, size = 0;
                 if (len >= 16) {
@@ -98,14 +118,18 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
                     base = be32_to_cpu_u32(*(const uint32_t *)(pdata + 0));
                     size = be32_to_cpu_u32(*(const uint32_t *)(pdata + 4));
                 }
-                if (base_out) *base_out = base;
-                if (size_out) *size_out = size;
-                return 0;
+                // Only accept if either name matched (memory or memory@) or device_type was explicitly memory
+                if (in_memory_node || device_type_memory) {
+                    if (base_out) *base_out = base;
+                    if (size_out) *size_out = size;
+                    return 0;
+                }
             }
             p += (len + 3) & ~3u;
         } else if (token == DTB_END_NODE) {
             if (depth > 0) depth--;
-            in_memory = 0;
+            in_memory_node = 0;
+            device_type_memory = 0;
         } else if (token == DTB_NOP) {
             // skip
         } else if (token == DTB_END) {
@@ -115,6 +139,100 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
         }
     }
     return -1;
+}
+
+// Reserve regions from /reserved-memory
+static void reserve_reserved_memory(void) {
+    struct dtb_header *hdr = dtb_get();
+    if (!hdr) return;
+    if (be32_to_cpu_u32(hdr->magic) != 0xd00dfeed) return;
+
+    const uint8_t *fdt = (const uint8_t *)hdr;
+    uint32_t off_struct = be32_to_cpu_u32(hdr->off_dt_struct);
+    uint32_t off_strings = be32_to_cpu_u32(hdr->off_dt_strings);
+    const char *strings = (const char *)(fdt + off_strings);
+
+    uint32_t p = off_struct;
+    int depth = 0;
+    int in_reserved = 0; // inside /reserved-memory
+    int addr_cells = 2;  // defaults for 64-bit
+    int size_cells = 2;
+
+    while (1) {
+        uint32_t token = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
+        if (token == DTB_BEGIN_NODE) {
+            const char *name = (const char *)(fdt + p);
+            size_t name_len = 0; while (name[name_len] != '\0') name_len++;
+            p += (name_len + 4) & ~3u;
+            depth++;
+            if (depth == 2 && strncmp(name, "reserved-memory", 15) == 0) {
+                in_reserved = 1;
+                // reset to defaults at the reserved-memory node
+                addr_cells = 2; size_cells = 2;
+            }
+        } else if (token == DTB_PROP) {
+            uint32_t len = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
+            uint32_t nameoff = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
+            const char *pname = strings + nameoff;
+            const uint8_t *pdata = fdt + p;
+            if (in_reserved) {
+                if (strcmp(pname, "#address-cells") == 0 && len >= 4) {
+                    addr_cells = (int)be32_to_cpu_u32(*(const uint32_t*)pdata);
+                } else if (strcmp(pname, "#size-cells") == 0 && len >= 4) {
+                    size_cells = (int)be32_to_cpu_u32(*(const uint32_t*)pdata);
+                } else if (strcmp(pname, "reg") == 0) {
+                    // reg on the reserved-memory node itself is uncommon; children have reg. Ignore here.
+                }
+            } else if (in_reserved == 2 && strcmp(pname, "reg") == 0) {
+                // Child under reserved-memory: parse reg entries
+                int tuple_cells = addr_cells + size_cells;
+                if (tuple_cells <= 0) tuple_cells = 4;
+                int tuples = (int)len / (4 * tuple_cells);
+                const uint8_t *q = pdata;
+                for (int t = 0; t < tuples; ++t) {
+                    uint64_t base = 0, size = 0;
+                    // read address
+                    for (int c = 0; c < addr_cells; ++c) {
+                        uint32_t cell = be32_to_cpu_u32(*(const uint32_t*)q); q += 4;
+                        base = (base << 32) | cell;
+                    }
+                    // read size
+                    for (int c = 0; c < size_cells; ++c) {
+                        uint32_t cell = be32_to_cpu_u32(*(const uint32_t*)q); q += 4;
+                        size = (size << 32) | cell;
+                    }
+                    if (size) {
+                        // Align to page boundaries for safety
+                        uint64_t aligned_base = base & ~(PMM_PAGE_SIZE - 1);
+                        uint64_t end = base + size;
+                        uint64_t aligned_end = (end + PMM_PAGE_SIZE - 1) & ~(PMM_PAGE_SIZE - 1);
+                        reserve_range(aligned_base, (aligned_end > aligned_base) ? (aligned_end - aligned_base) : 0);
+                        printk("PMM: reserved DTB region %p - %p\n", (void*)aligned_base, (void*)aligned_end);
+                    }
+                }
+            }
+            p += (len + 3) & ~3u;
+        } else if (token == DTB_END_NODE) {
+            if (in_reserved == 2) {
+                // leaving a child under reserved-memory
+                in_reserved = 1;
+            } else if (in_reserved == 1) {
+                // leaving reserved-memory node
+                in_reserved = 0;
+            }
+            if (depth > 0) depth--;
+        } else if (token == DTB_NOP) {
+        } else if (token == DTB_END) {
+            break;
+        } else {
+            break;
+        }
+
+        // Detect entering a child of reserved-memory: this is when we see BEGIN_NODE after in_reserved==1
+        if (token == DTB_BEGIN_NODE && in_reserved == 1 && depth >= 3) {
+            in_reserved = 2; // inside a child node
+        }
+    }
 }
 
 static void reserve_dtb_blob(void) {
@@ -137,6 +255,16 @@ void pmm_init_from_dtb(void) {
         printk("PMM: DTB memory not found, using fallback 1GiB@%p\n", (void*)base);
     }
 
+    // Ensure 4 KiB alignment of the managed range
+    uint64_t end = base + size;
+    uint64_t aligned_base = (base + PMM_PAGE_SIZE - 1) & ~(PMM_PAGE_SIZE - 1);
+    uint64_t aligned_end  = end & ~(PMM_PAGE_SIZE - 1);
+    if (aligned_end <= aligned_base) {
+        printk("PMM: invalid RAM range after alignment, falling back\n");
+        aligned_base = 0x40000000ULL; aligned_end = aligned_base + 0x40000000ULL;
+    }
+    base = aligned_base; size = aligned_end - aligned_base;
+
     pmm_mem_base = base;
     pmm_mem_size = size;
 
@@ -154,6 +282,7 @@ void pmm_init_from_dtb(void) {
     reserve_range((uint64_t)_kernel_start, (uint64_t)(_kernel_end - _kernel_start));
     reserve_range((uint64_t)stack_bottom, (uint64_t)(_stack_top - stack_bottom));
     reserve_dtb_blob();
+    reserve_reserved_memory();
 
     // Optionally reserve the first 1 MiB of RAM for safety (firmware/BIOS style)
     if (pmm_mem_base < (pmm_mem_base + pmm_mem_size)) {
@@ -197,10 +326,14 @@ void pmm_free_pages(void* addr, size_t count) {
     if (a & (PMM_PAGE_SIZE - 1)) return; // must be page aligned
     size_t first = addr_to_page(a);
     for (size_t i = 0; i < count && (first + i) < pmm_pages_total; ++i) {
-        if (test_bit(first + i)) {
-            clear_bit(first + i);
-            pmm_pages_free++;
+        size_t idx = first + i;
+        if (!test_bit(idx)) {
+            // double free detection
+            printk("PMM: warning: double-free page %d at %p ignored\n", (int)idx, (void*)page_to_addr(idx));
+            continue;
         }
+        clear_bit(idx);
+        pmm_pages_free++;
     }
 }
 
