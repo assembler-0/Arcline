@@ -29,5 +29,6 @@ extern uint64_t boot_x0;
 
 void dtb_init(void);
 void dtb_dump_info(void);
+struct dtb_header* dtb_get();
 
 #endif // _DTB_H

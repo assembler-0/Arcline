@@ -20,6 +20,8 @@ _start:
     // Also save original x0 for debugging
     ldr x1, =boot_x0
     str x0, [x1]
+    
+dtb_saved:
 
     // Check if we're the primary CPU (MPIDR_EL1 & 0xFF should be 0)
     mrs x0, mpidr_el1

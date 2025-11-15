@@ -1,7 +1,6 @@
 #include <drivers/serial.h>
 #include <dtb.h>
-
-#include "version.h"
+#include <version.h>
 
 void kmain(void) {
     serial_init();
