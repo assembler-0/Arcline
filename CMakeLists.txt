@@ -33,6 +33,11 @@ set(KERNEL_LOAD_ADDR "0x40080000" CACHE STRING "Kernel load/entry address (e.g.,
 
 set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined -Wl,-defsym=KERNEL_LOAD_ADDR=${KERNEL_LOAD_ADDR}")
 
+# --- VMM higher-half kernel base (virtual address) ---
+# This is only a configuration constant for now. The MMU is not enabled yet.
+# For 48-bit VA (common on AArch64), a typical higher-half base is 0xFFFFFF8000000000.
+set(KERNEL_VIRT_BASE "0xFFFFFF8000000000" CACHE STRING "Kernel higher-half virtual base (e.g., 0xFFFFFF8000000000 for 48-bit VA)")
+
 # --- Executable ---
 add_executable(arcline.elf "") # No sources here, they are added by subdirectories
 
@@ -41,6 +46,9 @@ target_include_directories(arcline.elf PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/arch/arm64/include
 )
+
+# Expose the configured higher-half base to C code as VMM_KERNEL_VIRT_BASE
+target_compile_definitions(arcline.elf PUBLIC VMM_KERNEL_VIRT_BASE=${KERNEL_VIRT_BASE})
 
 # --- Subdirectories ---
 add_subdirectory(arch)

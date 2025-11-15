@@ -38,4 +38,12 @@ int vmm_virt_to_phys(uint64_t va, uint64_t *pa_out);
 // Translate physical to virtual under identity-mapping assumption.
 static inline uint64_t vmm_phys_to_virt(uint64_t pa) { return pa; }
 
+// Kernel higher-half virtual base configured at build time.
+#ifndef VMM_KERNEL_VIRT_BASE
+#define VMM_KERNEL_VIRT_BASE 0xFFFFFF8000000000ULL
+#endif
+
+// Query the configured kernel higher-half base.
+uint64_t vmm_kernel_base(void);
+
 #endif // ARCLINE_MM_VMM_H

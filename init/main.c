@@ -39,6 +39,9 @@ void kmain(void) {
         return;
     }
 
+    // Log planned higher-half kernel base (MMU not enabled yet)
+    printk("VMM: configured higher-half base = %p (MMU off)\n", (void*)vmm_kernel_base());
+
     // Dump VMAs (should be empty at this stage)
     vmm_dump();
 

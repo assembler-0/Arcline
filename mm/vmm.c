@@ -266,3 +266,7 @@ int vmm_virt_to_phys(uint64_t va, uint64_t *pa_out) {
     *pa_out = va; // identity fallback
     return 0;
 }
+
+uint64_t vmm_kernel_base(void) {
+    return (uint64_t)VMM_KERNEL_VIRT_BASE;
+}
