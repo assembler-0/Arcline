@@ -5,10 +5,17 @@
 
 ENTRY(_start)
 
+/*
+ * Make the kernel load address configurable.
+ * Default for QEMU aarch64 -kernel on virt is 0x40080000.
+ * Can be overridden by the linker with: -Wl,-defsym=KERNEL_LOAD_ADDR=0xXXXXXXXX
+ */
+PROVIDE(KERNEL_LOAD_ADDR = 0x40080000);
+
 SECTIONS
 {
-    /* QEMU virt loads -kernel at 0x40080000 on AArch64 */
-    . = 0x40080000;
+    /* Use configurable load address (defaults to QEMU virt) */
+    . = KERNEL_LOAD_ADDR;
     _kernel_start = .;
 
     .text : ALIGN(4K)

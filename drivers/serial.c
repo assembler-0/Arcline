@@ -1,14 +1,18 @@
 #include <drivers/serial.h>
 #include <kernel/types.h>
+#include <dtb.h>
 
-// PL011 UART registers for QEMU virt machine
-#define UART_BASE 0x09000000UL
+// Default PL011 UART base for QEMU virt machine (fallback)
+#define DEFAULT_UART_BASE 0x09000000ULL
+
+// Runtime UART base (may be overridden by DTB)
+static uint64_t uart_base = DEFAULT_UART_BASE;
 
 // PL011 UART register offsets
-#define UARTDR    (volatile uint32_t*)(UART_BASE + 0x000) // Data Register
-#define UARTFR    (volatile uint32_t*)(UART_BASE + 0x018) // Flag Register
-#define UARTLCR_H (volatile uint32_t*)(UART_BASE + 0x02C) // Line Control Register
-#define UARTCR    (volatile uint32_t*)(UART_BASE + 0x030) // Control Register
+#define UARTDR()    ((volatile uint32_t*)(uart_base + 0x000)) // Data Register
+#define UARTFR()    ((volatile uint32_t*)(uart_base + 0x018)) // Flag Register
+#define UARTLCR_H() ((volatile uint32_t*)(uart_base + 0x02C)) // Line Control Register
+#define UARTCR()    ((volatile uint32_t*)(uart_base + 0x030)) // Control Register
 
 // Flag Register bits
 #define UARTFR_TXFF (1 << 5) // Transmit FIFO full
@@ -28,16 +32,22 @@ static inline void mb(void) {
 }
 
 void serial_init() {
+    // Try to get UART base from DTB (chosen/stdout-path)
+    uint64_t dtb_uart_base = 0;
+    if (dtb_get_stdout_uart_base(&dtb_uart_base) == 0 && dtb_uart_base != 0) {
+        uart_base = dtb_uart_base;
+    }
+
     // Disable UART
-    *UARTCR = 0;
+    *UARTCR() = 0;
     mb();
     
     // Set 8-bit word length, no parity, 1 stop bit
-    *UARTLCR_H = UARTLCR_H_WLEN_8;
+    *UARTLCR_H() = UARTLCR_H_WLEN_8;
     mb();
     
     // Enable UART, transmit and receive
-    *UARTCR = UARTCR_UARTEN | UARTCR_TXE | UARTCR_RXE;
+    *UARTCR() = UARTCR_UARTEN | UARTCR_TXE | UARTCR_RXE;
     mb();
 }
 
@@ -46,7 +56,7 @@ void serial_init() {
 
 static inline void uart_wait_tx_space(void) {
     unsigned int spins = 0;
-    while (*UARTFR & UARTFR_TXFF) {
+    while (*UARTFR() & UARTFR_TXFF) {
         if (++spins >= UART_SPIN_MAX) {
             // Give up waiting; avoid hanging the kernel
             break;
@@ -60,7 +70,7 @@ void serial_putc(char c) {
     if (c == '\n') {
         // Send \r first
         uart_wait_tx_space();
-        *UARTDR = (uint32_t)'\r';
+        *UARTDR() = (uint32_t)'\r';
         mb();
     }
 
@@ -68,7 +78,7 @@ void serial_putc(char c) {
     uart_wait_tx_space();
 
     // Write the character to the data register
-    *UARTDR = (uint32_t)c;
+    *UARTDR() = (uint32_t)c;
     mb();
 }
 

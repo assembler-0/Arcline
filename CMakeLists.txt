@@ -24,8 +24,14 @@ set(TARGET_ARCH "aarch64-elf")
 set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
 set(CMAKE_ASM_FLAGS "-target ${TARGET_ARCH} -mcpu=cortex-a57")
 
+# Linker script and configurable kernel load address
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/arch/arm64/boot/linker.ld)
-set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined")
+
+# Allow overriding the kernel load address without editing the linker script.
+# Default matches QEMU aarch64 virt -kernel load addr (0x40080000).
+set(KERNEL_LOAD_ADDR "0x40080000" CACHE STRING "Kernel load/entry address (e.g., 0x40080000 for QEMU virt)")
+
+set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined -Wl,-defsym=KERNEL_LOAD_ADDR=${KERNEL_LOAD_ADDR}")
 
 # --- Executable ---
 add_executable(arcline.elf ""
@@ -44,6 +50,7 @@ add_subdirectory(kernel)
 add_subdirectory(mm)
 add_subdirectory(fs)
 add_subdirectory(drivers)
+add_subdirectory(lib)
 
 # --- CMake Modules ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")

@@ -31,4 +31,9 @@ void dtb_init(void);
 void dtb_dump_info(void);
 struct dtb_header* dtb_get();
 
+// Helpers
+// Resolve the UART base address from the DTB using chosen/stdout-path and aliases.
+// Returns 0 on success and writes the base to out_base. Returns -1 on failure.
+int dtb_get_stdout_uart_base(uint64_t *out_base);
+
 #endif // _DTB_H

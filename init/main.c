@@ -15,9 +15,6 @@ void kmain(void) {
     dtb_init();
     dtb_dump_info();
 
-    // Test different print functions
-    printk("Testing printk: %d %x %p %s\n", 42, 0xdeadbeef, (void*)0x1234, "hello");
-    fprintk(STDERR_FD, "Error message to stderr\n");
 
     // Loop forever
     while (1) {
