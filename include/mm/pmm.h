@@ -17,4 +17,8 @@ void  pmm_free_page(void* addr);
 size_t pmm_total_pages(void);
 size_t pmm_free_pages_count(void);
 
+// Debug/consistency check: scans bitmap and validates counters.
+// Returns 0 if consistent, -1 if mismatch detected.
+int pmm_check(void);
+
 #endif // ARCLINE_MM_PMM_H

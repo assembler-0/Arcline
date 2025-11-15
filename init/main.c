@@ -3,6 +3,7 @@
 #include <kernel/printk.h>
 #include <version.h>
 #include <mm/pmm.h>
+#include <mm/vmm.h>
 
 void kmain(void) {
     serial_init();
@@ -21,6 +22,22 @@ void kmain(void) {
     printk("PMM: total=%d pages, free=%d pages (size=%d KiB)\n",
            (int)pmm_total_pages(), (int)pmm_free_pages_count(), (int)(pmm_free_pages_count() * 4));
 
+    // Optional: consistency check
+    if (pmm_check() == 0) {
+        printk("PMM: consistency check OK\n");
+    } else {
+        printk("PMM: consistency check FAILED\n");
+    }
+
+    // Initialize minimal VMM identity layer and demonstrate vaddr->paddr
+    vmm_init_identity();
+    {
+        uint64_t va = (uint64_t)&kmain;
+        uint64_t pa = 0;
+        if (vmm_virt_to_phys(va, &pa) == 0) {
+            printk("VMM: v2p %p -> %p (identity)\n", (void*)va, (void*)pa);
+        }
+    }
 
     // Loop forever
     while (1) {

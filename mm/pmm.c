@@ -71,6 +71,9 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
     int depth = 0;
     int in_memory_node = 0;   // true when current node is a memory node
     int device_type_memory = 0; // true if device_type=="memory" seen for current node
+    // Read #address-cells and #size-cells from the parent (root) by default.
+    int parent_addr_cells = 2; // default for 64-bit
+    int parent_size_cells = 2; // default for 64-bit
 
     while (1) {
         uint32_t token = be32_to_cpu_u32(*(const uint32_t *)(fdt + p)); p += 4;
@@ -104,19 +107,28 @@ static int dtb_find_memory_region(uint64_t *base_out, uint64_t *size_out) {
                     device_type_memory = 1;
                 }
             }
+            // Capture root-level #address-cells and #size-cells (depth==1 means root's properties)
+            if (depth == 1) {
+                if (strcmp(pname, "#address-cells") == 0 && len >= 4) {
+                    parent_addr_cells = (int)be32_to_cpu_u32(*(const uint32_t*)pdata);
+                } else if (strcmp(pname, "#size-cells") == 0 && len >= 4) {
+                    parent_size_cells = (int)be32_to_cpu_u32(*(const uint32_t*)pdata);
+                }
+            }
             if (in_memory_node && pname[0]=='r'&&pname[1]=='e'&&pname[2]=='g'&&pname[3]=='\0') {
                 // Assume 64-bit address/size pairs if len >= 16; else 32-bit.
                 uint64_t base = 0, size = 0;
-                if (len >= 16) {
-                    uint32_t hi = be32_to_cpu_u32(*(const uint32_t *)(pdata + 0));
-                    uint32_t lo = be32_to_cpu_u32(*(const uint32_t *)(pdata + 4));
-                    base = (((uint64_t)hi) << 32) | lo;
-                    hi = be32_to_cpu_u32(*(const uint32_t *)(pdata + 8));
-                    lo = be32_to_cpu_u32(*(const uint32_t *)(pdata + 12));
-                    size = (((uint64_t)hi) << 32) | lo;
-                } else if (len >= 8) {
-                    base = be32_to_cpu_u32(*(const uint32_t *)(pdata + 0));
-                    size = be32_to_cpu_u32(*(const uint32_t *)(pdata + 4));
+                int ac = parent_addr_cells > 0 ? parent_addr_cells : 2;
+                int sc = parent_size_cells > 0 ? parent_size_cells : 2;
+                const uint8_t *q = pdata;
+                // Only read the first tuple
+                for (int c = 0; c < ac && (q + 4) <= (pdata + len); ++c) {
+                    uint32_t cell = be32_to_cpu_u32(*(const uint32_t*)q); q += 4;
+                    base = (base << 32) | cell;
+                }
+                for (int c = 0; c < sc && (q + 4) <= (pdata + len); ++c) {
+                    uint32_t cell = be32_to_cpu_u32(*(const uint32_t*)q); q += 4;
+                    size = (size << 32) | cell;
                 }
                 // Only accept if either name matched (memory or memory@) or device_type was explicitly memory
                 if (in_memory_node || device_type_memory) {
@@ -283,6 +295,14 @@ void pmm_init_from_dtb(void) {
     reserve_range((uint64_t)stack_bottom, (uint64_t)(_stack_top - stack_bottom));
     reserve_dtb_blob();
     reserve_reserved_memory();
+    // Reserve UART MMIO page if available to avoid PMM handing it out
+    uint64_t uart_base = 0;
+    if (dtb_get_stdout_uart_base(&uart_base) == 0 && uart_base) {
+        // Reserve one page around the UART base (PL011 fits in 4KB)
+        uint64_t mmio_base = uart_base & ~(PMM_PAGE_SIZE - 1);
+        reserve_range(mmio_base, PMM_PAGE_SIZE);
+        printk("PMM: reserved UART MMIO at %p\n", (void*)mmio_base);
+    }
 
     // Optionally reserve the first 1 MiB of RAM for safety (firmware/BIOS style)
     if (pmm_mem_base < (pmm_mem_base + pmm_mem_size)) {
@@ -341,3 +361,17 @@ void pmm_free_page(void* addr) { pmm_free_pages(addr, 1); }
 
 size_t pmm_total_pages(void) { return pmm_pages_total; }
 size_t pmm_free_pages_count(void) { return pmm_pages_free; }
+
+int pmm_check(void) {
+    // Count allocated pages by scanning bitmap
+    size_t set_count = 0;
+    for (size_t i = 0; i < pmm_pages_total; ++i) {
+        if (test_bit(i)) set_count++;
+    }
+    size_t expected_set = pmm_pages_total - pmm_pages_free;
+    if (set_count != expected_set) {
+        printk("PMM: check failed, set=%d expected=%d\n", (int)set_count, (int)expected_set);
+        return -1;
+    }
+    return 0;
+}
