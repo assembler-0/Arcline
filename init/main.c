@@ -10,7 +10,7 @@ void kmain(void) {
     printk_init();
 
     printk("%s\n", KERNEL_NAME);
-    printk("copyright (C) 2025 assembler-0\n");
+    printk("%s\n",KERNEL_COPYRIGHT);
     printk("build %s\n", KERNEL_BUILD_DATE);
 
     // Initialize and dump DTB info
@@ -24,7 +24,7 @@ void kmain(void) {
 
     // Optional: consistency check
     if (pmm_check() == 0) {
-        printk("PMM: consistency check OK\n");
+        fprintk(STDERR_FD,"PMM: consistency check OK\n");
     } else {
         printk("PMM: consistency check FAILED\n");
     }
