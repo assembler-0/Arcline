@@ -56,12 +56,12 @@ void kmain(void) {
     }
 
     // Initialize interrupt subsystem
+    exception_init();
     irq_init();
     gic_init();
     timer_init(100);
 
     // etc.
-    exception_init();
     vmm_dump();
 
     printk("IRQ: Enabling interrupts...\n");

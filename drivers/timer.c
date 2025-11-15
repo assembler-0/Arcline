@@ -36,6 +36,10 @@ static void timer_irq_handler(int irq, void *dev) {
     jiffies++;
     
     write_cntp_tval(timer_freq / 100);
+
+    if (jiffies % 100 == 0) {
+        printk("Timer: seconds = %llu\n", jiffies/100);
+    }
 }
 
 void timer_init(uint32_t freq_hz) {
@@ -63,4 +67,12 @@ void timer_udelay(uint32_t us) {
     uint64_t start = read_cntpct();
     uint64_t delta = ((uint64_t)us * timer_freq) / 1000000;
     while (read_cntpct() - start < delta);
+}
+
+void delay(uint32_t ms) {
+    timer_udelay(ms * 1000);
+}
+
+void delay_sec(uint32_t s) {
+    timer_udelay(s * 1000000);
 }
