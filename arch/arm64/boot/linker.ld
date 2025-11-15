@@ -7,8 +7,8 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Start at 1MB for QEMU virt machine */
-    . = 0x40000000;
+    /* QEMU virt loads -kernel at 0x40080000 on AArch64 */
+    . = 0x40080000;
     _kernel_start = .;
 
     .text : ALIGN(4K)

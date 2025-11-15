@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Archline
+project(Arcline
     LANGUAGES C CXX ASM
     VERSION 0.0.1
     DESCRIPTION "Arcline - A POSIX-compliant operating system for arm64 architecture"
@@ -21,14 +21,15 @@ set(CMAKE_LINKER clang)
 # --- Compiler and Linker Flags ---
 set(TARGET_ARCH "aarch64-elf")
 
-set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57")
+set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
 set(CMAKE_ASM_FLAGS "-target ${TARGET_ARCH} -mcpu=cortex-a57")
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/arch/arm64/boot/linker.ld)
-set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld")
+set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined")
 
 # --- Executable ---
-add_executable(arcline.elf "") # No sources here, they are added by subdirectories
+add_executable(arcline.elf ""
+        include/stdarg.h) # No sources here, they are added by subdirectories
 
 target_include_directories(arcline.elf PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

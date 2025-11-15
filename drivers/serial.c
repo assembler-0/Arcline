@@ -41,20 +41,35 @@ void serial_init() {
     mb();
 }
 
-void serial_putc(char c) {
-    // Wait for the transmit FIFO to have space
+// A very small spin timeout to avoid hard-lock if UART isn't ready
+#define UART_SPIN_MAX 1000000
+
+static inline void uart_wait_tx_space(void) {
+    unsigned int spins = 0;
     while (*UARTFR & UARTFR_TXFF) {
+        if (++spins >= UART_SPIN_MAX) {
+            // Give up waiting; avoid hanging the kernel
+            break;
+        }
         mb();
     }
+}
+
+void serial_putc(char c) {
+    // Convert \n to \r\n for proper line endings
+    if (c == '\n') {
+        // Send \r first
+        uart_wait_tx_space();
+        *UARTDR = (uint32_t)'\r';
+        mb();
+    }
+
+    // Wait for the transmit FIFO to have space
+    uart_wait_tx_space();
 
     // Write the character to the data register
     *UARTDR = (uint32_t)c;
     mb();
-    
-    // Convert \n to \r\n for proper line endings
-    if (c == '\n') {
-        serial_putc('\r');
-    }
 }
 
 void serial_puts(const char *s) {

@@ -3,5 +3,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 #endif // _KERNEL_TYPES_H

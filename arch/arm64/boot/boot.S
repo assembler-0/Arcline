@@ -28,8 +28,9 @@ dtb_saved:
     and x0, x0, #0xFF
     cbnz x0, hang  // If not CPU 0, hang
 
-    // Set up the stack pointer
+    // Set up the stack pointer (must be 16-byte aligned for aarch64)
     ldr x0, =_stack_top
+    and x0, x0, #~15  // Align to 16 bytes
     mov sp, x0
 
     // Clear the BSS section before calling C code
@@ -57,7 +58,7 @@ hang:
 
 // Put stack in .data section so it's available immediately
 .section ".data"
-.align 4
+.align 16  // Ensure 16-byte alignment for aarch64
 stack_bottom:
     .space 16384 // Reserve 16KB for the boot stack
 _stack_top:

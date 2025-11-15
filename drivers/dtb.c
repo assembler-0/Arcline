@@ -1,5 +1,5 @@
 #include <dtb.h>
-#include <drivers/serial.h>
+#include <kernel/printk.h>
 
 // Convert big-endian to little-endian
 static uint32_t be32_to_cpu(uint32_t val) {
@@ -23,11 +23,7 @@ static uint64_t dtb_search(void) {
     // Try fixed locations first
     for (int i = 0; locations[i] != 0; i++) {
         uint32_t *ptr = (uint32_t *)locations[i];
-        serial_puts("DTB: Checking ");
-        serial_print_hex(locations[i]);
-        serial_puts(" = ");
-        serial_print_hex(*ptr);
-        serial_puts("\n");
+        printk("DTB: Checking %p = %x\n", (void*)locations[i], *ptr);
         
         if (be32_to_cpu(*ptr) == 0xd00dfeed) {
             return locations[i];
@@ -39,11 +35,7 @@ static uint64_t dtb_search(void) {
     uint64_t start = ((uint64_t)_kernel_end + 0xfffff) & ~0xfffff; // Align to 1MB
     uint64_t end = 0x50000000; // Search up to 256MB from RAM start
     
-    serial_puts("DTB: Scanning from ");
-    serial_print_hex(start);
-    serial_puts(" to ");
-    serial_print_hex(end);
-    serial_puts("\n");
+    printk("DTB: Scanning from %p to %p\n", (void*)start, (void*)end);
     
     for (uint64_t addr = start; addr < end; addr += 0x1000) { // 4KB steps
         uint32_t *ptr = (uint32_t *)addr;
@@ -56,23 +48,19 @@ static uint64_t dtb_search(void) {
 }
 
 void dtb_init(void) {
-    serial_puts("DTB: boot_x0 = ");
-    serial_print_hex(boot_x0);
-    serial_puts(", dtb_ptr = ");
-    serial_print_hex(dtb_ptr);
-    serial_puts("\n");
+    printk("DTB: boot_x0 = %p, dtb_ptr = %p\n", (void*)boot_x0, (void*)dtb_ptr);
     
     // Try using boot_x0 if dtb_ptr is 0
     uint64_t dtb_addr = dtb_ptr ? dtb_ptr : boot_x0;
     
     // If still no DTB, search for it
     if (!dtb_addr) {
-        serial_puts("DTB: Searching for DTB in memory...\n");
+        printk("DTB: Searching for DTB in memory...\n");
         dtb_addr = dtb_search();
     }
     
     if (!dtb_addr) {
-        serial_puts("DTB: No DTB found\n");
+        printk("DTB: No DTB found\n");
         return;
     }
     
@@ -83,33 +71,25 @@ void dtb_init(void) {
     
     // Check magic number
     if (be32_to_cpu(hdr->magic) != 0xd00dfeed) {
-        serial_puts("DTB: Invalid magic number: ");
-        serial_print_hex(be32_to_cpu(hdr->magic));
-        serial_puts("\n");
+        printk("DTB: Invalid magic number: %x\n", be32_to_cpu(hdr->magic));
         return;
     }
     
-    serial_puts("DTB: Found valid device tree at ");
-    serial_print_hex(dtb_addr);
-    serial_puts("\n");
+    printk("DTB: Found valid device tree at %p\n", (void*)dtb_addr);
 }
 
 void dtb_dump_info(void) {
     if (!dtb_ptr) {
-        serial_puts("DTB: No DTB available\n");
+        printk("DTB: No DTB available\n");
         return;
     }
     
     struct dtb_header *hdr = (struct dtb_header *)dtb_ptr;
     
-    serial_puts("DTB Info:\n");
-    serial_puts("  Magic: ");
-    serial_print_hex(be32_to_cpu(hdr->magic));
-    serial_puts("\n  Total size: ");
-    serial_print_hex(be32_to_cpu(hdr->totalsize));
-    serial_puts("\n  Version: ");
-    serial_print_hex(be32_to_cpu(hdr->version));
-    serial_puts("\n");
+    printk("DTB Info:\n");
+    printk("  Magic: %x\n", be32_to_cpu(hdr->magic));
+    printk("  Total size: %x\n", be32_to_cpu(hdr->totalsize));
+    printk("  Version: %x\n", be32_to_cpu(hdr->version));
 }
 
 struct dtb_header* dtb_get() {
