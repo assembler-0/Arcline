@@ -1,4 +1,5 @@
 #include <kernel/printk.h>
+#include <kernel/panic.h>
 #include <stdint.h>
 
 #define ESR_EC_SHIFT 26
@@ -15,16 +16,13 @@ void handle_sync_exception(void) {
     
     uint32_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
     
-    fprintk(STDERR_FD, "\nSync exception: EC=0x%x FAR=%p ELR=%p\n", ec, (void*)far, (void*)elr);
-    
-    while(1) __asm__ volatile("wfe");
+    panic("Sync exception: EC=0x%x FAR=%p ELR=%p", ec, (void*)far, (void*)elr);
 }
 
 void handle_fiq(void) {
-    fprintk(STDERR_FD, "FIQ received\n");
+    panic("Unexpected FIQ");
 }
 
 void handle_serror(void) {
-    fprintk(STDERR_FD, "SError received\n");
-    while(1) __asm__ volatile("wfe");
+    panic("SError exception");
 }

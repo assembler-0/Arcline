@@ -1,6 +1,7 @@
 #include <drivers/serial.h>
 #include <dtb.h>
 #include <kernel/printk.h>
+#include <kernel/panic.h>
 #include <version.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
@@ -29,21 +30,17 @@ void kmain(void) {
            (int)(pmm_free_pages_count() * 4));
 
     // Optional: consistency check
-    if (pmm_check() == 0) {
-        printk("PMM: consistency check OK\n");
-    } else {
-        printk("PMM: consistency check FAILED\n");
-        return;
+    if (pmm_check() != 0) {
+        panic("PMM consistency check failed");
     }
+    printk("PMM: consistency check OK\n");
 
     // Initialize VMM structures (RB-tree VMAs)
     vmm_init_identity();
-    if (vmm_init() == 0) {
-        printk("VMM: initialized RB-tree manager\n");
-    } else {
-        printk("VMM: init failed\n");
-        return;
+    if (vmm_init() != 0) {
+        panic("VMM initialization failed");
     }
+    printk("VMM: initialized RB-tree manager\n");
 
     // Initialize and enable MMU
     mmu_init();
@@ -66,8 +63,8 @@ void kmain(void) {
     // etc.
     exception_init();
     vmm_dump();
-    
-    printk("\nIRQ: Enabling interrupts...\n");
+
+    printk("IRQ: Enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
 
     // Loop forever
