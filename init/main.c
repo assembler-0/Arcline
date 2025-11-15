@@ -24,20 +24,23 @@ void kmain(void) {
 
     // Optional: consistency check
     if (pmm_check() == 0) {
-        fprintk(STDERR_FD,"PMM: consistency check OK\n");
+        printk("PMM: consistency check OK\n");
     } else {
         printk("PMM: consistency check FAILED\n");
+        return;
     }
 
-    // Initialize minimal VMM identity layer and demonstrate vaddr->paddr
+    // Initialize VMM structures (RB-tree VMAs). MMU remains off for now.
     vmm_init_identity();
-    {
-        uint64_t va = (uint64_t)&kmain;
-        uint64_t pa = 0;
-        if (vmm_virt_to_phys(va, &pa) == 0) {
-            printk("VMM: v2p %p -> %p (identity)\n", (void*)va, (void*)pa);
-        }
+    if (vmm_init() == 0) {
+        printk("VMM: initialized RB-tree manager\n");
+    } else {
+        printk("VMM: init failed\n");
+        return;
     }
+
+    // Dump VMAs (should be empty at this stage)
+    vmm_dump();
 
     // Loop forever
     while (1) {

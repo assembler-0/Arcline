@@ -22,8 +22,9 @@
 // but gives us a place to hang future page-table setup.
 void vmm_init_identity(void);
 
-// Planned full VMM API (stubs for now until MMU enable is implemented)
-int vmm_init(void); // set up page tables and enable MMU (not yet implemented)
+// Planned full VMM API (initial implementation without enabling MMU yet)
+// Returns 0 on success, negative on error.
+int vmm_init(void); // create kernel page tables and VMA tree (MMU kept off for now)
 int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs);
 int vmm_unmap(uint64_t va, uint64_t size);
 int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs);
