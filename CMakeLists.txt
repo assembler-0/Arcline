@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(Arcline C ASM)
+project(Archline
+    LANGUAGES C CXX ASM
+    VERSION 0.0.1
+    DESCRIPTION "Arcline - A POSIX-compliant operating system for arm64 architecture"
+    HOMEPAGE_URL "https://github.com/assembler-0/Arcline"
+)
 
 # --- Toolchain and Target ---
 set(CMAKE_SYSTEM_NAME Generic)
@@ -39,6 +44,9 @@ add_subdirectory(mm)
 add_subdirectory(fs)
 add_subdirectory(drivers)
 
+# --- CMake Modules ---
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+include(ccache)
 
 # --- Post-build command ---
 add_custom_command(
@@ -51,7 +59,6 @@ add_custom_command(
 add_custom_target(run
     COMMAND qemu-system-aarch64
             -M virt
-            -dtb ${CMAKE_CURRENT_SOURCE_DIR}/dtb/virt.dtb
             -cpu cortex-a57
             -serial stdio
             -kernel ${CMAKE_BINARY_DIR}/arcline.bin
