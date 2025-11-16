@@ -1,8 +1,8 @@
 #ifndef ARCLINE_EEVDF_H
 #define ARCLINE_EEVDF_H
 
-#include <stdint.h>
 #include <kernel/sched/task.h>
+#include <stdint.h>
 
 #define EEVDF_MIN_GRANULARITY 750000
 #define EEVDF_TARGET_LATENCY 6000000
@@ -35,7 +35,7 @@ typedef struct {
 void eevdf_init(void);
 void eevdf_enqueue(task_t *task);
 void eevdf_dequeue(task_t *task);
-task_t* eevdf_pick_next(void);
+task_t *eevdf_pick_next(void);
 void eevdf_update_curr(task_t *task, uint64_t now);
 uint64_t eevdf_calc_slice(task_t *task);
 void eevdf_set_nice(task_t *task, int nice);

@@ -2,8 +2,10 @@
 
 int strncmp(const char *a, const char *b, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        if (a[i] != b[i]) return (unsigned char)a[i] - (unsigned char)b[i];
-        if (a[i] == '\0') return 0;
+        if (a[i] != b[i])
+            return (unsigned char)a[i] - (unsigned char)b[i];
+        if (a[i] == '\0')
+            return 0;
     }
     return 0;
 }
@@ -16,21 +18,23 @@ int strcmp(const char *a, const char *b) {
     return (unsigned char)*a - (unsigned char)*b;
 }
 
-int strlen(const char* str) {
-    if (!str) return 0;
+int strlen(const char *str) {
+    if (!str)
+        return 0;
     int len = 0;
-    while (str[len]) len++;
+    while (str[len])
+        len++;
     return len;
 }
 
-int strnlen(const char* str, const size_t max) {
+int strnlen(const char *str, const size_t max) {
     size_t len = 0;
-    while (len < max && str[len]) len++;
+    while (len < max && str[len])
+        len++;
     return len;
 }
 
-
-const char* strchr(const char* str, int c) {
+const char *strchr(const char *str, int c) {
     char target = (char)c;
 
     // Loop until we hit the null terminator
@@ -52,19 +56,22 @@ const char* strchr(const char* str, int c) {
     return NULL;
 }
 
-void strncpy(char* dest, const char* src, size_t max_len) {
-    if (!dest || !src) return;
+void strncpy(char *dest, const char *src, size_t max_len) {
+    if (!dest || !src)
+        return;
     size_t i = 0;
-    for (; i + 1 < max_len && src[i]; i++) dest[i] = src[i];
+    for (; i + 1 < max_len && src[i]; i++)
+        dest[i] = src[i];
     dest[i] = '\0';
 }
 
-void strcpy(char* dest, const char* src) {
-    if (!dest || !src) return;
+void strcpy(char *dest, const char *src) {
+    if (!dest || !src)
+        return;
     // Optimize for 64-bit aligned copies when possible
     if (((uintptr_t)dest & 7) == 0 && ((uintptr_t)src & 7) == 0) {
-        uint64_t* d64 = (uint64_t*)dest;
-        const uint64_t* s64 = (const uint64_t*)src;
+        uint64_t *d64 = (uint64_t *)dest;
+        const uint64_t *s64 = (const uint64_t *)src;
 
         uint64_t val;
         while ((val = *s64++) != 0) {
@@ -78,56 +85,61 @@ void strcpy(char* dest, const char* src) {
                 (val & 0x000000000000FF00ULL) == 0 ||
                 (val & 0x00000000000000FFULL) == 0) {
                 // Found null terminator, fall back to byte copy
-                char* d = (char*)d64;
-                const char* s = (const char*)(s64 - 1);
-                while ((*d++ = *s++));
+                char *d = (char *)d64;
+                const char *s = (const char *)(s64 - 1);
+                while ((*d++ = *s++))
+                    ;
                 return;
-                }
+            }
             *d64++ = val;
         }
-        *(char*)d64 = '\0';
+        *(char *)d64 = '\0';
     } else {
         // Original byte-by-byte copy for unaligned data
-        while ((*dest++ = *src++));
+        while ((*dest++ = *src++))
+            ;
     }
 }
 
-void strcat(char* dest, const char* src) {
-    if (!dest || !src) return;
-    while (*dest) dest++;
-    strcpy(dest, src);  // Reuse optimized strcpy
+void strcat(char *dest, const char *src) {
+    if (!dest || !src)
+        return;
+    while (*dest)
+        dest++;
+    strcpy(dest, src); // Reuse optimized strcpy
 }
 
-void htoa(uint64_t n, char* buffer) {
-    if (!buffer) return;
+void htoa(uint64_t n, char *buffer) {
+    if (!buffer)
+        return;
 
-    __attribute__((nonstring))
-    static const char hex_chars[16] = "0123456789ABCDEF";
+    __attribute__((nonstring)) static const char hex_chars[16] =
+        "0123456789ABCDEF";
 
     buffer[0] = '0';
     buffer[1] = 'x';
 
     // Unroll the loop for better performance
-    buffer[2]  = hex_chars[(n >> 60) & 0xF];
-    buffer[3]  = hex_chars[(n >> 56) & 0xF];
-    buffer[4]  = hex_chars[(n >> 52) & 0xF];
-    buffer[5]  = hex_chars[(n >> 48) & 0xF];
-    buffer[6]  = hex_chars[(n >> 44) & 0xF];
-    buffer[7]  = hex_chars[(n >> 40) & 0xF];
-    buffer[8]  = hex_chars[(n >> 36) & 0xF];
-    buffer[9]  = hex_chars[(n >> 32) & 0xF];
+    buffer[2] = hex_chars[(n >> 60) & 0xF];
+    buffer[3] = hex_chars[(n >> 56) & 0xF];
+    buffer[4] = hex_chars[(n >> 52) & 0xF];
+    buffer[5] = hex_chars[(n >> 48) & 0xF];
+    buffer[6] = hex_chars[(n >> 44) & 0xF];
+    buffer[7] = hex_chars[(n >> 40) & 0xF];
+    buffer[8] = hex_chars[(n >> 36) & 0xF];
+    buffer[9] = hex_chars[(n >> 32) & 0xF];
     buffer[10] = hex_chars[(n >> 28) & 0xF];
     buffer[11] = hex_chars[(n >> 24) & 0xF];
     buffer[12] = hex_chars[(n >> 20) & 0xF];
     buffer[13] = hex_chars[(n >> 16) & 0xF];
     buffer[14] = hex_chars[(n >> 12) & 0xF];
-    buffer[15] = hex_chars[(n >> 8)  & 0xF];
-    buffer[16] = hex_chars[(n >> 4)  & 0xF];
+    buffer[15] = hex_chars[(n >> 8) & 0xF];
+    buffer[16] = hex_chars[(n >> 4) & 0xF];
     buffer[17] = hex_chars[n & 0xF];
     buffer[18] = '\0';
 }
 
-void itoa(uint64_t n, char* buffer) {
+void itoa(uint64_t n, char *buffer) {
     if (n == 0) {
         buffer[0] = '0';
         buffer[1] = '\0';
@@ -135,13 +147,13 @@ void itoa(uint64_t n, char* buffer) {
     }
 
     char temp_buffer[21];
-    char* p = &temp_buffer[20];
+    char *p = &temp_buffer[20];
     *p = '\0';
 
     // Use faster division by avoiding modulo when possible
     while (n >= 10) {
         uint64_t q = n / 10;
-        *--p = '0' + (n - q * 10);  // Faster than n % 10
+        *--p = '0' + (n - q * 10); // Faster than n % 10
         n = q;
     }
     *--p = '0' + n;
@@ -155,8 +167,7 @@ void itoa(uint64_t n, char* buffer) {
  * @s: The string to be searched
  * @accept: The string to search for
  */
-size_t strspn(const char *s, const char *accept)
-{
+size_t strspn(const char *s, const char *accept) {
     const char *p;
     const char *a;
     size_t count = 0;
@@ -179,14 +190,13 @@ size_t strspn(const char *s, const char *accept)
  * @cs: The string to be searched
  * @ct: The characters to search for
  */
-char * strpbrk(const char * cs,const char * ct)
-{
-    const char *sc1,*sc2;
+char *strpbrk(const char *cs, const char *ct) {
+    const char *sc1, *sc2;
 
-    for( sc1 = cs; *sc1 != '\0'; ++sc1) {
-        for( sc2 = ct; *sc2 != '\0'; ++sc2) {
+    for (sc1 = cs; *sc1 != '\0'; ++sc1) {
+        for (sc2 = ct; *sc2 != '\0'; ++sc2) {
             if (*sc1 == *sc2)
-                return (char *) sc1;
+                return (char *)sc1;
         }
     }
     return NULL;
@@ -203,8 +213,7 @@ char * strpbrk(const char * cs,const char * ct)
  * of that name. In fact, it was stolen from glibc2 and de-fancy-fied.
  * Same semantics, slimmer shape. ;)
  */
-char * strsep(char **s, const char *ct)
-{
+char *strsep(char **s, const char *ct) {
     char *sbegin = *s, *end;
 
     if (sbegin == NULL)
@@ -218,8 +227,8 @@ char * strsep(char **s, const char *ct)
     return sbegin;
 }
 
-void* memset(void* restrict s, const int c, const size_t n) {
-    unsigned char* p = s;
+void *memset(void *restrict s, const int c, const size_t n) {
+    unsigned char *p = s;
     const unsigned char byte = (unsigned char)c;
     for (size_t i = 0; i < n; ++i) {
         p[i] = byte;
@@ -227,18 +236,18 @@ void* memset(void* restrict s, const int c, const size_t n) {
     return s;
 }
 
-void* memcpy(void* restrict dest, const void* restrict src, const size_t n) {
-    unsigned char* d = dest;
-    const unsigned char* s = src;
+void *memcpy(void *restrict dest, const void *restrict src, const size_t n) {
+    unsigned char *d = dest;
+    const unsigned char *s = src;
     for (size_t i = 0; i < n; ++i) {
         d[i] = s[i];
     }
     return dest;
 }
 
-void* memmove(void* dest, const void* src, const size_t n) {
-    unsigned char* d = dest;
-    const unsigned char* s = src;
+void *memmove(void *dest, const void *src, const size_t n) {
+    unsigned char *d = dest;
+    const unsigned char *s = src;
     if (d < s) {
         for (size_t i = 0; i < n; ++i) {
             d[i] = s[i];
@@ -251,9 +260,9 @@ void* memmove(void* dest, const void* src, const size_t n) {
     return dest;
 }
 
-int memcmp(const void* s1, const void* s2, const size_t n) {
-    const unsigned char* p1 = s1;
-    const unsigned char* p2 = s2;
+int memcmp(const void *s1, const void *s2, const size_t n) {
+    const unsigned char *p1 = s1;
+    const unsigned char *p2 = s2;
     for (size_t i = 0; i < n; ++i) {
         if (p1[i] != p2[i]) {
             return (int)p1[i] - (int)p2[i];

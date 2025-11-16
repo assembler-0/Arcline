@@ -1,20 +1,19 @@
+#include <drivers/gic.h>
 #include <drivers/serial.h>
+#include <drivers/timer.h>
 #include <dtb.h>
-#include <kernel/printk.h>
-#include <kernel/panic.h>
-#include <version.h>
-#include <mm/pmm.h>
-#include <mm/vmm.h>
-#include <mm/mmu.h>
 #include <kernel/exception.h>
 #include <kernel/irq.h>
-#include <drivers/gic.h>
-#include <drivers/timer.h>
-#include <mm/memtest.h>
+#include <kernel/panic.h>
+#include <kernel/printk.h>
 #include <kernel/sched/task.h>
-#include <kernel/sched/eevdf.h>
+#include <mm/memtest.h>
+#include <mm/mmu.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
+#include <version.h>
 
-void proc(int argc, char** argv, char** envp) {
+void proc(int argc, char **argv, char **envp) {
     (void)envp;
     printk("Task test argc=%d\n", argc);
     for (int i = 0; i < argc; i++) {
@@ -28,7 +27,7 @@ void kmain(void) {
     printk_init();
 
     printk("%s\n", KERNEL_NAME);
-    printk("%s\n",KERNEL_COPYRIGHT);
+    printk("%s\n", KERNEL_COPYRIGHT);
     printk("build %s\n", KERNEL_BUILD_DATE);
 
     // Initialize and dump DTB info
@@ -58,20 +57,20 @@ void kmain(void) {
     mmu_init();
     mmu_enable();
     mmu_switch_to_higher_half();
-    
+
     // Map all available physical memory to higher-half
     uint64_t mem_size = pmm_total_pages() * 4096;
     uint64_t attrs = PTE_PAGE | PTE_SH_INNER | PTE_ATTR_IDX(MAIR_IDX_NORMAL);
     if (mmu_map_region(0, mem_size, attrs) == 0) {
         printk("MMU: mapped %d MiB physical memory to higher-half\n",
-            (int)(mem_size / (1024*1024)));
+               (int)(mem_size / (1024 * 1024)));
     }
 
     // Run memory tests
     if (memtest_run() != 0) {
         panic("Memory tests failed");
     }
-    
+
     // Initialize interrupt subsystem
     exception_init();
     irq_init();
@@ -83,12 +82,9 @@ void kmain(void) {
     task_init();
 
     task_args args = {
-        .argc = 2,
-        .argv = (char*[]){"task_print", "arg1"},
-        .envp = NULL
-    };
+        .argc = 2, .argv = (char *[]){"task_print", "arg1"}, .envp = NULL};
     task_create(proc, 0, &args);
-    
+
     printk("Created test task\n");
 
     printk("\nIRQ: enabling interrupts...\n");

@@ -1,21 +1,23 @@
 // Minimal VMM with RB-tree VMA manager
 
-#include <mm/vmm.h>
-#include <mm/mmu.h>
 #include <kernel/printk.h>
+#include <kernel/spinlock.h>
+#include <mm/mmu.h>
+#include <mm/vmm.h>
 #include <stdint.h>
 
 // 4 KiB page alignment for now
 #define VMM_PAGE_SIZE 4096ULL
 #define ALIGN_DOWN(x, a) ((uint64_t)(x) & ~((uint64_t)(a) - 1))
-#define ALIGN_UP(x, a)   (((uint64_t)(x) + ((uint64_t)(a) - 1)) & ~((uint64_t)(a) - 1))
+#define ALIGN_UP(x, a)                                                         \
+    (((uint64_t)(x) + ((uint64_t)(a) - 1)) & ~((uint64_t)(a) - 1))
 
 typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
 typedef struct vma_node {
     uint64_t va;
     uint64_t pa;
-    uint64_t size;    // bytes
+    uint64_t size; // bytes
     uint32_t attrs;
     // RB-tree links
     struct vma_node *left;
@@ -25,18 +27,23 @@ typedef struct vma_node {
 } vma_node_t;
 
 static vma_node_t *vma_root = NULL;
+static spinlock_t vmm_lock;
 
-static inline int is_red(vma_node_t *n){ return n && n->color==RB_RED; }
-static inline int is_black(vma_node_t *n){ return !n || n->color==RB_BLACK; }
+static inline int is_red(vma_node_t *n) { return n && n->color == RB_RED; }
+static inline int is_black(vma_node_t *n) { return !n || n->color == RB_BLACK; }
 
 static void rotate_left(vma_node_t **root, vma_node_t *x) {
     vma_node_t *y = x->right;
     x->right = y->left;
-    if (y->left) y->left->parent = x;
+    if (y->left)
+        y->left->parent = x;
     y->parent = x->parent;
-    if (!x->parent) *root = y;
-    else if (x == x->parent->left) x->parent->left = y;
-    else x->parent->right = y;
+    if (!x->parent)
+        *root = y;
+    else if (x == x->parent->left)
+        x->parent->left = y;
+    else
+        x->parent->right = y;
     y->left = x;
     x->parent = y;
 }
@@ -44,11 +51,15 @@ static void rotate_left(vma_node_t **root, vma_node_t *x) {
 static void rotate_right(vma_node_t **root, vma_node_t *y) {
     vma_node_t *x = y->left;
     y->left = x->right;
-    if (x->right) x->right->parent = y;
+    if (x->right)
+        x->right->parent = y;
     x->parent = y->parent;
-    if (!y->parent) *root = x;
-    else if (y == y->parent->left) y->parent->left = x;
-    else y->parent->right = x;
+    if (!y->parent)
+        *root = x;
+    else if (y == y->parent->left)
+        y->parent->left = x;
+    else
+        y->parent->right = x;
     x->right = y;
     y->parent = x;
 }
@@ -60,66 +71,136 @@ static void insert_fixup(vma_node_t **root, vma_node_t *z) {
         if (p == g->left) {
             vma_node_t *u = g->right;
             if (is_red(u)) { // case 1
-                p->color = RB_BLACK; u->color = RB_BLACK; g->color = RB_RED; z = g; continue;
+                p->color = RB_BLACK;
+                u->color = RB_BLACK;
+                g->color = RB_RED;
+                z = g;
+                continue;
             }
             if (z == p->right) { // case 2
-                z = p; rotate_left(root, z); p = z->parent; g = p->parent;
+                z = p;
+                rotate_left(root, z);
+                p = z->parent;
+                g = p->parent;
             }
             // case 3
-            p->color = RB_BLACK; g->color = RB_RED; rotate_right(root, g);
+            p->color = RB_BLACK;
+            g->color = RB_RED;
+            rotate_right(root, g);
         } else {
             vma_node_t *u = g->left;
             if (is_red(u)) { // mirror case 1
-                p->color = RB_BLACK; u->color = RB_BLACK; g->color = RB_RED; z = g; continue;
+                p->color = RB_BLACK;
+                u->color = RB_BLACK;
+                g->color = RB_RED;
+                z = g;
+                continue;
             }
             if (z == p->left) { // mirror case 2
-                z = p; rotate_right(root, z); p = z->parent; g = p->parent;
+                z = p;
+                rotate_right(root, z);
+                p = z->parent;
+                g = p->parent;
             }
             // mirror case 3
-            p->color = RB_BLACK; g->color = RB_RED; rotate_left(root, g);
+            p->color = RB_BLACK;
+            g->color = RB_RED;
+            rotate_left(root, g);
         }
     }
     (*root)->color = RB_BLACK;
 }
 
-static vma_node_t* tree_min(vma_node_t *n){ while(n && n->left) n = n->left; return n; }
-
-static void transplant(vma_node_t **root, vma_node_t *u, vma_node_t *v) {
-    if (!u->parent) *root = v;
-    else if (u == u->parent->left) u->parent->left = v;
-    else u->parent->right = v;
-    if (v) v->parent = u->parent;
+static vma_node_t *tree_min(vma_node_t *n) {
+    while (n && n->left)
+        n = n->left;
+    return n;
 }
 
-static void delete_fixup(vma_node_t **root, vma_node_t *x, vma_node_t *x_parent) {
+static void transplant(vma_node_t **root, vma_node_t *u, vma_node_t *v) {
+    if (!u->parent)
+        *root = v;
+    else if (u == u->parent->left)
+        u->parent->left = v;
+    else
+        u->parent->right = v;
+    if (v)
+        v->parent = u->parent;
+}
+
+static void delete_fixup(vma_node_t **root, vma_node_t *x,
+                         vma_node_t *x_parent) {
     while ((x != *root) && is_black(x)) {
         if (x == (x_parent ? x_parent->left : NULL)) {
             vma_node_t *w = x_parent ? x_parent->right : NULL;
-            if (is_red(w)) { w->color = RB_BLACK; if (x_parent) x_parent->color = RB_RED; rotate_left(root, x_parent); w = x_parent ? x_parent->right : NULL; }
-            if (is_black(w ? w->left : NULL) && is_black(w ? w->right : NULL)) { if (w) w->color = RB_RED; x = x_parent; x_parent = x_parent ? x_parent->parent : NULL; }
-            else {
-                if (is_black(w ? w->right : NULL)) { if (w && w->left) w->left->color = RB_BLACK; if (w) w->color = RB_RED; rotate_right(root, w); w = x_parent ? x_parent->right : NULL; }
-                if (w) w->color = x_parent ? x_parent->color : RB_BLACK;
-                if (x_parent) x_parent->color = RB_BLACK;
-                if (w && w->right) w->right->color = RB_BLACK;
+            if (is_red(w)) {
+                w->color = RB_BLACK;
+                if (x_parent)
+                    x_parent->color = RB_RED;
                 rotate_left(root, x_parent);
-                x = *root; break;
+                w = x_parent ? x_parent->right : NULL;
+            }
+            if (is_black(w ? w->left : NULL) && is_black(w ? w->right : NULL)) {
+                if (w)
+                    w->color = RB_RED;
+                x = x_parent;
+                x_parent = x_parent ? x_parent->parent : NULL;
+            } else {
+                if (is_black(w ? w->right : NULL)) {
+                    if (w && w->left)
+                        w->left->color = RB_BLACK;
+                    if (w)
+                        w->color = RB_RED;
+                    rotate_right(root, w);
+                    w = x_parent ? x_parent->right : NULL;
+                }
+                if (w)
+                    w->color = x_parent ? x_parent->color : RB_BLACK;
+                if (x_parent)
+                    x_parent->color = RB_BLACK;
+                if (w && w->right)
+                    w->right->color = RB_BLACK;
+                rotate_left(root, x_parent);
+                x = *root;
+                break;
             }
         } else {
             vma_node_t *w = x_parent ? x_parent->left : NULL;
-            if (is_red(w)) { w->color = RB_BLACK; if (x_parent) x_parent->color = RB_RED; rotate_right(root, x_parent); w = x_parent ? x_parent->left : NULL; }
-            if (is_black(w ? w->right : NULL) && is_black(w ? w->left : NULL)) { if (w) w->color = RB_RED; x = x_parent; x_parent = x_parent ? x_parent->parent : NULL; }
-            else {
-                if (is_black(w ? w->left : NULL)) { if (w && w->right) w->right->color = RB_BLACK; if (w) w->color = RB_RED; rotate_left(root, w); w = x_parent ? x_parent->left : NULL; }
-                if (w) w->color = x_parent ? x_parent->color : RB_BLACK;
-                if (x_parent) x_parent->color = RB_BLACK;
-                if (w && w->left) w->left->color = RB_BLACK;
+            if (is_red(w)) {
+                w->color = RB_BLACK;
+                if (x_parent)
+                    x_parent->color = RB_RED;
                 rotate_right(root, x_parent);
-                x = *root; break;
+                w = x_parent ? x_parent->left : NULL;
+            }
+            if (is_black(w ? w->right : NULL) && is_black(w ? w->left : NULL)) {
+                if (w)
+                    w->color = RB_RED;
+                x = x_parent;
+                x_parent = x_parent ? x_parent->parent : NULL;
+            } else {
+                if (is_black(w ? w->left : NULL)) {
+                    if (w && w->right)
+                        w->right->color = RB_BLACK;
+                    if (w)
+                        w->color = RB_RED;
+                    rotate_left(root, w);
+                    w = x_parent ? x_parent->left : NULL;
+                }
+                if (w)
+                    w->color = x_parent ? x_parent->color : RB_BLACK;
+                if (x_parent)
+                    x_parent->color = RB_BLACK;
+                if (w && w->left)
+                    w->left->color = RB_BLACK;
+                rotate_right(root, x_parent);
+                x = *root;
+                break;
             }
         }
     }
-    if (x) x->color = RB_BLACK;
+    if (x)
+        x->color = RB_BLACK;
 }
 
 static void rb_delete(vma_node_t **root, vma_node_t *z) {
@@ -127,28 +208,55 @@ static void rb_delete(vma_node_t **root, vma_node_t *z) {
     vma_node_t *x = NULL;
     vma_node_t *x_parent = NULL;
     rb_color_t y_orig = y->color;
-    if (!z->left) { x = z->right; x_parent = z->parent; transplant(root, z, z->right); }
-    else if (!z->right) { x = z->left; x_parent = z->parent; transplant(root, z, z->left); }
-    else {
-        y = tree_min(z->right); y_orig = y->color; x = y->right; x_parent = y->parent;
-        if (y->parent == z) { if (x) x->parent = y; x_parent = y; }
-        else { transplant(root, y, y->right); y->right = z->right; if (y->right) y->right->parent = y; }
-        transplant(root, z, y); y->left = z->left; if (y->left) y->left->parent = y; y->color = z->color;
+    if (!z->left) {
+        x = z->right;
+        x_parent = z->parent;
+        transplant(root, z, z->right);
+    } else if (!z->right) {
+        x = z->left;
+        x_parent = z->parent;
+        transplant(root, z, z->left);
+    } else {
+        y = tree_min(z->right);
+        y_orig = y->color;
+        x = y->right;
+        x_parent = y->parent;
+        if (y->parent == z) {
+            if (x)
+                x->parent = y;
+            x_parent = y;
+        } else {
+            transplant(root, y, y->right);
+            y->right = z->right;
+            if (y->right)
+                y->right->parent = y;
+        }
+        transplant(root, z, y);
+        y->left = z->left;
+        if (y->left)
+            y->left->parent = y;
+        y->color = z->color;
     }
-    if (y_orig == RB_BLACK) delete_fixup(root, x, x_parent);
+    if (y_orig == RB_BLACK)
+        delete_fixup(root, x, x_parent);
 }
 
-static vma_node_t* find_le(vma_node_t *root, uint64_t va) {
+static vma_node_t *find_le(vma_node_t *root, uint64_t va) {
     vma_node_t *res = NULL;
     while (root) {
-        if (va < root->va) root = root->left;
-        else { res = root; root = root->right; }
+        if (va < root->va)
+            root = root->left;
+        else {
+            res = root;
+            root = root->right;
+        }
     }
     return res; // greatest <= va
 }
 
 static int overlaps(vma_node_t *n, uint64_t va, uint64_t size) {
-    if (!n) return 0;
+    if (!n)
+        return 0;
     uint64_t a0 = n->va, a1 = n->va + n->size;
     uint64_t b0 = va, b1 = va + size;
     return !(b1 <= a0 || a1 <= b0);
@@ -165,14 +273,15 @@ static void init_vma_pool(void) {
     }
 }
 
-static vma_node_t* vma_alloc_node(void) {
+static vma_node_t *vma_alloc_node(void) {
     if (!vma_free_list) {
         static int initialized = 0;
         if (!initialized) {
             init_vma_pool();
             initialized = 1;
         }
-        if (!vma_free_list) return NULL;
+        if (!vma_free_list)
+            return NULL;
     }
     vma_node_t *n = vma_free_list;
     vma_free_list = n->left;
@@ -182,7 +291,8 @@ static vma_node_t* vma_alloc_node(void) {
 }
 
 static void vma_free_node(vma_node_t *n) {
-    if (!n) return;
+    if (!n)
+        return;
     n->left = vma_free_list;
     vma_free_list = n;
 }
@@ -190,140 +300,224 @@ static void vma_free_node(vma_node_t *n) {
 void vmm_init_identity(void) { /* placeholder for future page tables */ }
 
 int vmm_init(void) {
+    spinlock_init(&vmm_lock);
     vma_root = NULL;
     init_vma_pool();
     return 0;
 }
 
-static vma_node_t* find_ge(vma_node_t *root, uint64_t va) {
+static vma_node_t *find_ge(vma_node_t *root, uint64_t va) {
     vma_node_t *res = NULL;
     while (root) {
-        if (va <= root->va) { res = root; root = root->left; }
-        else root = root->right;
+        if (va <= root->va) {
+            res = root;
+            root = root->left;
+        } else
+            root = root->right;
     }
     return res;
 }
 
-static vma_node_t* find_exact(vma_node_t *root, uint64_t va) {
+static vma_node_t *find_exact(vma_node_t *root, uint64_t va) {
     while (root) {
-        if (va < root->va) root = root->left;
-        else if (va > root->va) root = root->right;
-        else return root;
+        if (va < root->va)
+            root = root->left;
+        else if (va > root->va)
+            root = root->right;
+        else
+            return root;
     }
     return NULL;
 }
 
 int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
-    if (size == 0) return -1;
-    if ((va & (VMM_PAGE_SIZE-1)) || (pa & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    
+    uint64_t flags = spinlock_lock_irqsave(&vmm_lock);
+
+    if (size == 0) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -1;
+    }
+    if ((va & (VMM_PAGE_SIZE - 1)) || (pa & (VMM_PAGE_SIZE - 1)) ||
+        (size & (VMM_PAGE_SIZE - 1))) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -2;
+    }
+
     vma_node_t *pred = find_le(vma_root, va);
-    if (overlaps(pred, va, size)) return -3;
-    
+    if (overlaps(pred, va, size)) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -3;
+    }
+
     vma_node_t *succ = find_ge(vma_root, va);
-    if (overlaps(succ, va, size)) return -3;
+    if (overlaps(succ, va, size)) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -3;
+    }
 
     vma_node_t *n = vma_alloc_node();
-    if (!n) return -4;
-    n->va = va; n->pa = pa; n->size = size; n->attrs = attrs; n->color = RB_RED;
+    if (!n) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -4;
+    }
+    n->va = va;
+    n->pa = pa;
+    n->size = size;
+    n->attrs = attrs;
+    n->color = RB_RED;
 
-    vma_node_t **link = &vma_root; vma_node_t *parent = NULL;
+    vma_node_t **link = &vma_root;
+    vma_node_t *parent = NULL;
     while (*link) {
         parent = *link;
-        if (va < parent->va) link = &parent->left; else link = &parent->right;
+        if (va < parent->va)
+            link = &parent->left;
+        else
+            link = &parent->right;
     }
-    *link = n; n->parent = parent; n->left = n->right = NULL; n->color = RB_RED;
+    *link = n;
+    n->parent = parent;
+    n->left = n->right = NULL;
+    n->color = RB_RED;
     insert_fixup(&vma_root, n);
 
     // Map pages in MMU if TTBR1 is set
     uint64_t ttbr1 = mmu_get_ttbr1();
     if (ttbr1) {
         uint64_t pte_attrs = PTE_PAGE | PTE_AF | PTE_SH_INNER;
-        if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
-        else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
-        if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
-        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
-        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
-        
+        if (attrs & VMM_ATTR_DEVICE)
+            pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
+        else
+            pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+        if (!(attrs & VMM_ATTR_W))
+            pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN)
+            pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN)
+            pte_attrs |= (1ULL << 53);
+
         for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
-            mmu_map_page((uint64_t*)ttbr1, va + off, pa + off, pte_attrs);
+            mmu_map_page((uint64_t *)ttbr1, va + off, pa + off, pte_attrs);
         }
-        
+
         if (attrs & VMM_ATTR_X) {
             cache_flush_range(va, size);
             icache_invalidate_range(va, size);
         }
         tlb_flush_range(va, size);
     }
+
+    spinlock_unlock_irqrestore(&vmm_lock, flags);
     return 0;
 }
 
 int vmm_unmap(uint64_t va, uint64_t size) {
-    if (size == 0) return -1;
-    if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    
+    uint64_t flags = spinlock_lock_irqsave(&vmm_lock);
+
+    if (size == 0) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -1;
+    }
+    if ((va & (VMM_PAGE_SIZE - 1)) || (size & (VMM_PAGE_SIZE - 1))) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -2;
+    }
+
     vma_node_t *cur = find_exact(vma_root, va);
-    if (!cur || cur->size != size) return -3;
+    if (!cur || cur->size != size) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -3;
+    }
 
     uint64_t ttbr1 = mmu_get_ttbr1();
     if (ttbr1) {
         for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
-            mmu_unmap_page((uint64_t*)ttbr1, va + off);
+            mmu_unmap_page((uint64_t *)ttbr1, va + off);
         }
         tlb_flush_range(va, size);
     }
 
     rb_delete(&vma_root, cur);
     vma_free_node(cur);
+
+    spinlock_unlock_irqrestore(&vmm_lock, flags);
     return 0;
 }
 
 int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs) {
-    if (size == 0) return -1;
-    if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    
+    uint64_t flags = spinlock_lock_irqsave(&vmm_lock);
+
+    if (size == 0) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -1;
+    }
+    if ((va & (VMM_PAGE_SIZE - 1)) || (size & (VMM_PAGE_SIZE - 1))) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -2;
+    }
+
     vma_node_t *cur = find_exact(vma_root, va);
-    if (!cur || cur->size != size) return -3;
+    if (!cur || cur->size != size) {
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
+        return -3;
+    }
     cur->attrs = attrs;
-    
+
     uint64_t ttbr1 = mmu_get_ttbr1();
     if (ttbr1) {
         uint64_t pte_attrs = PTE_PAGE | PTE_AF | PTE_SH_INNER;
-        if (attrs & VMM_ATTR_DEVICE) pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
-        else pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
-        if (!(attrs & VMM_ATTR_W)) pte_attrs |= PTE_RO;
-        if (attrs & VMM_ATTR_UXN) pte_attrs |= (1ULL << 54);
-        if (attrs & VMM_ATTR_PXN) pte_attrs |= (1ULL << 53);
-        
+        if (attrs & VMM_ATTR_DEVICE)
+            pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_DEVICE);
+        else
+            pte_attrs |= PTE_ATTR_IDX(MAIR_IDX_NORMAL);
+        if (!(attrs & VMM_ATTR_W))
+            pte_attrs |= PTE_RO;
+        if (attrs & VMM_ATTR_UXN)
+            pte_attrs |= (1ULL << 54);
+        if (attrs & VMM_ATTR_PXN)
+            pte_attrs |= (1ULL << 53);
+
         for (uint64_t off = 0; off < size; off += VMM_PAGE_SIZE) {
-            mmu_update_page_attrs((uint64_t*)ttbr1, va + off, pte_attrs);
+            mmu_update_page_attrs((uint64_t *)ttbr1, va + off, pte_attrs);
         }
         tlb_flush_range(va, size);
     }
+
+    spinlock_unlock_irqrestore(&vmm_lock, flags);
     return 0;
 }
 
 static void inorder_dump(vma_node_t *n) {
-    if (!n) return;
+    if (!n)
+        return;
     inorder_dump(n->left);
-    printk("VMM: VMA va=%p..%p -> pa=%p attrs=%x\n", (void*)n->va, (void*)(n->va + n->size), (void*)n->pa, (unsigned)n->attrs);
+    printk("VMM: VMA va=%p..%p -> pa=%p attrs=%x\n", (void *)n->va,
+           (void *)(n->va + n->size), (void *)n->pa, (unsigned)n->attrs);
     inorder_dump(n->right);
 }
 
-void vmm_dump(void) { inorder_dump(vma_root); }
+void vmm_dump(void) {
+    uint64_t flags = spinlock_lock_irqsave(&vmm_lock);
+    inorder_dump(vma_root);
+    spinlock_unlock_irqrestore(&vmm_lock, flags);
+}
 
 int vmm_virt_to_phys(uint64_t va, uint64_t *pa_out) {
-    if (!pa_out) return -1;
-    // If a VMA covers this VA, translate via offset; otherwise assume identity (early boot)
+    if (!pa_out)
+        return -1;
+
+    uint64_t flags = spinlock_lock_irqsave(&vmm_lock);
+    // If a VMA covers this VA, translate via offset; otherwise assume identity
+    // (early boot)
     vma_node_t *n = find_le(vma_root, va);
     if (n && va >= n->va && va < (n->va + n->size)) {
         *pa_out = n->pa + (va - n->va);
+        spinlock_unlock_irqrestore(&vmm_lock, flags);
         return 0;
     }
     *pa_out = va; // identity fallback
+    spinlock_unlock_irqrestore(&vmm_lock, flags);
     return 0;
 }
 
-uint64_t vmm_kernel_base(void) {
-    return (uint64_t)VMM_KERNEL_VIRT_BASE;
-}
+uint64_t vmm_kernel_base(void) { return (uint64_t)VMM_KERNEL_VIRT_BASE; }

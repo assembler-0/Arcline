@@ -3,7 +3,7 @@
 .global switch_to
 switch_to:
     // x0 = prev context, x1 = next context
-    
+
     // Save callee-saved registers (x19-x30, sp, pc)
     stp x19, x20, [x0, #152]
     stp x21, x22, [x0, #168]
@@ -15,7 +15,7 @@ switch_to:
     str x9, [x0, #248]
     adr x9, 1f
     str x9, [x0, #256]
-    
+
     // Restore callee-saved registers
     ldp x19, x20, [x1, #152]
     ldp x21, x22, [x1, #168]

@@ -14,7 +14,7 @@ exception_vector_table:
     b fiq_handler
     .align 7
     b serror_handler
-    
+
     // Current EL with SPx
     .align 7
     b sync_handler
@@ -24,7 +24,7 @@ exception_vector_table:
     b fiq_handler
     .align 7
     b serror_handler
-    
+
     // Lower EL using AArch64
     .align 7
     b sync_handler
@@ -34,7 +34,7 @@ exception_vector_table:
     b fiq_handler
     .align 7
     b serror_handler
-    
+
     // Lower EL using AArch32
     .align 7
     b sync_handler
@@ -68,9 +68,9 @@ irq_handler:
     stp x24, x25, [sp, #-16]!
     stp x26, x27, [sp, #-16]!
     stp x28, xzr, [sp, #-16]!
-    
+
     bl handle_irq
-    
+
     ldp x28, xzr, [sp], #16
     ldp x26, x27, [sp], #16
     ldp x24, x25, [sp], #16

@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 
-#define TASK_RUNNING     0
-#define TASK_READY       1
-#define TASK_BLOCKED     2
-#define TASK_ZOMBIE      3
+#define TASK_RUNNING 0
+#define TASK_READY 1
+#define TASK_BLOCKED 2
+#define TASK_ZOMBIE 3
 
 #define KERNEL_STACK_SIZE 16384
 
@@ -34,22 +34,20 @@ struct task {
     int priority;
     uint64_t time_slice;
     uint64_t vruntime;
-    
+
     cpu_context_t context;
     void *kernel_stack;
     uint64_t *pgd;
-    
+
     task_t *next;
     task_t *prev;
 };
 
 void task_init(void);
-task_t* task_create(void (*entry)(int argc, char** argv, char** envp),
-    int priority,
-    task_args* args
-);
+task_t *task_create(void (*entry)(int argc, char **argv, char **envp),
+                    int priority, task_args *args);
 void task_exit(int code);
-task_t* task_current(void);
+task_t *task_current(void);
 void task_set_current(task_t *task);
 void schedule(void);
 void schedule_preempt(cpu_context_t *regs);

@@ -6,6 +6,10 @@ project(Arcline
     HOMEPAGE_URL "https://github.com/assembler-0/Arcline"
 )
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(WARNING "Release build for this stage may cause printk driver to malfunction")
+endif()
+
 # --- Toolchain and Target ---
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)

@@ -1,9 +1,9 @@
-#include <stddef.h>
-#include <drivers/timer.h>
 #include <drivers/gic.h>
+#include <drivers/timer.h>
 #include <kernel/irq.h>
 #include <kernel/printk.h>
 #include <kernel/sched/task.h>
+#include <stddef.h>
 
 #define TIMER_IRQ 30
 
@@ -22,16 +22,14 @@ uint64_t read_cntfrq(void) {
     return val;
 }
 
-uint64_t get_ns(void) {
-    return read_cntpct() * 1000000000ULL / read_cntfrq();
-}
+uint64_t get_ns(void) { return read_cntpct() * 1000000000ULL / read_cntfrq(); }
 
 static inline void write_cntp_tval(uint32_t val) {
-    __asm__ volatile("msr cntp_tval_el0, %0" :: "r"((uint64_t)val));
+    __asm__ volatile("msr cntp_tval_el0, %0" ::"r"((uint64_t)val));
 }
 
 static inline void write_cntp_ctl(uint32_t val) {
-    __asm__ volatile("msr cntp_ctl_el0, %0" :: "r"((uint64_t)val));
+    __asm__ volatile("msr cntp_ctl_el0, %0" ::"r"((uint64_t)val));
 }
 
 static void timer_irq_handler(int irq, void *dev) {
@@ -52,34 +50,29 @@ static void timer_irq_handler(int irq, void *dev) {
 void timer_init(uint32_t freq_hz) {
     uint64_t cntfrq = read_cntfrq();
     timer_freq = (uint32_t)cntfrq;
-    
+
     printk("Timer: frequency %u Hz, target %u Hz\n", timer_freq, freq_hz);
-    
+
     irq_install_handler(TIMER_IRQ, timer_irq_handler, NULL);
-    
+
     write_cntp_ctl(0);
     write_cntp_tval(timer_freq / freq_hz);
     write_cntp_ctl(1);
-    
+
     irq_enable(TIMER_IRQ);
-    
+
     printk("Timer: initialized\n");
 }
 
-uint64_t timer_get_ticks(void) {
-    return jiffies;
-}
+uint64_t timer_get_ticks(void) { return jiffies; }
 
 void timer_udelay(uint32_t us) {
     uint64_t start = read_cntpct();
     uint64_t delta = ((uint64_t)us * timer_freq) / 1000000;
-    while (read_cntpct() - start < delta);
+    while (read_cntpct() - start < delta)
+        ;
 }
 
-void delay(uint32_t ms) {
-    timer_udelay(ms * 1000);
-}
+void delay(uint32_t ms) { timer_udelay(ms * 1000); }
 
-void delay_sec(uint32_t s) {
-    timer_udelay(s * 1000000);
-}
+void delay_sec(uint32_t s) { timer_udelay(s * 1000000); }

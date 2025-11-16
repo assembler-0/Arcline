@@ -1,6 +1,6 @@
 #include <drivers/serial.h>
-#include <kernel/types.h>
 #include <dtb.h>
+#include <kernel/types.h>
 
 // Default PL011 UART base for QEMU virt machine (fallback)
 #define DEFAULT_UART_BASE 0x09000000ULL
@@ -9,10 +9,11 @@
 static uint64_t uart_base = DEFAULT_UART_BASE;
 
 // PL011 UART register offsets
-#define UARTDR()    ((volatile uint32_t*)(uart_base + 0x000)) // Data Register
-#define UARTFR()    ((volatile uint32_t*)(uart_base + 0x018)) // Flag Register
-#define UARTLCR_H() ((volatile uint32_t*)(uart_base + 0x02C)) // Line Control Register
-#define UARTCR()    ((volatile uint32_t*)(uart_base + 0x030)) // Control Register
+#define UARTDR() ((volatile uint32_t *)(uart_base + 0x000)) // Data Register
+#define UARTFR() ((volatile uint32_t *)(uart_base + 0x018)) // Flag Register
+#define UARTLCR_H()                                                            \
+    ((volatile uint32_t *)(uart_base + 0x02C)) // Line Control Register
+#define UARTCR() ((volatile uint32_t *)(uart_base + 0x030)) // Control Register
 
 // Flag Register bits
 #define UARTFR_TXFF (1 << 5) // Transmit FIFO full
@@ -20,16 +21,14 @@ static uint64_t uart_base = DEFAULT_UART_BASE;
 
 // Control Register bits
 #define UARTCR_UARTEN (1 << 0) // UART enable
-#define UARTCR_TXE    (1 << 8) // Transmit enable
-#define UARTCR_RXE    (1 << 9) // Receive enable
+#define UARTCR_TXE (1 << 8)    // Transmit enable
+#define UARTCR_RXE (1 << 9)    // Receive enable
 
 // Line Control Register bits
 #define UARTLCR_H_WLEN_8 (3 << 5) // 8-bit word length
 
 // Memory barrier for ARM64
-static inline void mb(void) {
-    __asm__ volatile("dsb sy" ::: "memory");
-}
+static inline void mb(void) { __asm__ volatile("dsb sy" ::: "memory"); }
 
 void serial_init() {
     // Try to get UART base from DTB (chosen/stdout-path)
@@ -41,11 +40,11 @@ void serial_init() {
     // Disable UART
     *UARTCR() = 0;
     mb();
-    
+
     // Set 8-bit word length, no parity, 1 stop bit
     *UARTLCR_H() = UARTLCR_H_WLEN_8;
     mb();
-    
+
     // Enable UART, transmit and receive
     *UARTCR() = UARTCR_UARTEN | UARTCR_TXE | UARTCR_RXE;
     mb();
@@ -83,8 +82,9 @@ void serial_putc(char c) {
 }
 
 void serial_puts(const char *s) {
-    if (!s) return;
-    
+    if (!s)
+        return;
+
     while (*s) {
         serial_putc(*s++);
     }
