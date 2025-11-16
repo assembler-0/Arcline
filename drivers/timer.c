@@ -3,7 +3,7 @@
 #include <drivers/gic.h>
 #include <kernel/irq.h>
 #include <kernel/printk.h>
-#include <kernel/task.h>
+#include <kernel/sched/task.h>
 
 #define TIMER_IRQ 30
 

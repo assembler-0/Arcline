@@ -11,7 +11,7 @@
 #include <drivers/gic.h>
 #include <drivers/timer.h>
 #include <mm/memtest.h>
-#include <kernel/task.h>
+#include <kernel/sched/task.h>
 
 void proc(int argc, char** argv, char** envp) {
     (void)envp;
