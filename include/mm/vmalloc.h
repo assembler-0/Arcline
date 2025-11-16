@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-void* vmalloc(uint64_t size);
+void *vmalloc(uint64_t size);
 void vfree(void *ptr, uint64_t size);
 void vmalloc_stats(void);
 

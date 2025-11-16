@@ -12,7 +12,7 @@ void pid_init(void) {
 
 int pid_alloc(void) {
     spinlock_lock(&pid_lock);
-    
+
     for (int i = 1; i < MAX_PID; i++) {
         int word = i / 32;
         int bit = i % 32;
@@ -22,14 +22,15 @@ int pid_alloc(void) {
             return i;
         }
     }
-    
+
     spinlock_unlock(&pid_lock);
     return -1;
 }
 
 void pid_free(int pid) {
-    if (pid <= 0 || pid >= MAX_PID) return;
-    
+    if (pid <= 0 || pid >= MAX_PID)
+        return;
+
     spinlock_lock(&pid_lock);
     int word = pid / 32;
     int bit = pid % 32;

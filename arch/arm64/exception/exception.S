@@ -6,96 +6,232 @@
 .global exception_vector_table
 exception_vector_table:
     // Current EL with SP0
-    .align 7
-    b sync_handler
-    .align 7
-    b irq_handler
-    .align 7
-    b fiq_handler
-    .align 7
-    b serror_handler
-    
-    // Current EL with SPx
-    .align 7
-    b sync_handler
-    .align 7
-    b irq_handler
-    .align 7
-    b fiq_handler
-    .align 7
-    b serror_handler
-    
-    // Lower EL using AArch64
-    .align 7
-    b sync_handler
-    .align 7
-    b irq_handler
-    .align 7
-    b fiq_handler
-    .align 7
-    b serror_handler
-    
-    // Lower EL using AArch32
-    .align 7
-    b sync_handler
-    .align 7
-    b irq_handler
-    .align 7
-    b fiq_handler
-    .align 7
-    b serror_handler
+    .align 7; b sync_handler_sp0
+    .align 7; b irq_handler_sp0
+    .align 7; b fiq_handler_sp0
+    .align 7; b serror_handler_sp0
 
-sync_handler:
+    // Current EL with SPx
+    .align 7; b sync_handler_spx
+    .align 7; b irq_handler_spx
+    .align 7; b fiq_handler_spx
+    .align 7; b serror_handler_spx
+
+    // Lower EL using AArch64
+    .align 7; b sync_handler_lower_aarch64
+    .align 7; b irq_handler_lower_aarch64
+    .align 7; b fiq_handler_lower_aarch64
+    .align 7; b serror_handler_lower_aarch64
+
+    // Lower EL using AArch32
+    .align 7; b sync_handler_lower_aarch32
+    .align 7; b irq_handler_lower_aarch32
+    .align 7; b fiq_handler_lower_aarch32
+    .align 7; b serror_handler_lower_aarch32
+
+.macro save_all_but_sp
+    stp x29, x30, [sp, #-16]!
+    stp x27, x28, [sp, #-16]!
+    stp x25, x26, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    stp x19, x20, [sp, #-16]!
+    stp x17, x18, [sp, #-16]!
+    stp x15, x16, [sp, #-16]!
+    stp x13, x14, [sp, #-16]!
+    stp x11, x12, [sp, #-16]!
+    stp x9, x10, [sp, #-16]!
+    stp x7, x8, [sp, #-16]!
+    stp x5, x6, [sp, #-16]!
+    stp x3, x4, [sp, #-16]!
+    stp x1, x2, [sp, #-16]!
+    stp x0, xzr, [sp, #-16]! // Store x0, and 0 for where x1 would be
+.endm
+
+.macro restore_all_but_sp
+    ldp x0, xzr, [sp], #16
+    ldp x1, x2, [sp], #16
+    ldp x3, x4, [sp], #16
+    ldp x5, x6, [sp], #16
+    ldp x7, x8, [sp], #16
+    ldp x9, x10, [sp], #16
+    ldp x11, x12, [sp], #16
+    ldp x13, x14, [sp], #16
+    ldp x15, x16, [sp], #16
+    ldp x17, x18, [sp], #16
+    ldp x19, x20, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x25, x26, [sp], #16
+    ldp x27, x28, [sp], #16
+    ldp x29, x30, [sp], #16
+.endm
+
+irq_handler_spx:
+    sub sp, sp, #272 // sizeof(cpu_context_t)
+    stp x0, x1, [sp, #0]
+    stp x2, x3, [sp, #16]
+    stp x4, x5, [sp, #32]
+    stp x6, x7, [sp, #48]
+    stp x8, x9, [sp, #64]
+    stp x10, x11, [sp, #80]
+    stp x12, x13, [sp, #96]
+    stp x14, x15, [sp, #112]
+    stp x16, x17, [sp, #128]
+    stp x18, x19, [sp, #144]
+    stp x20, x21, [sp, #160]
+    stp x22, x23, [sp, #176]
+    stp x24, x25, [sp, #192]
+    stp x26, x27, [sp, #208]
+    stp x28, x29, [sp, #224]
+    str x30, [sp, #240]
+
+    mov x9, sp
+    add x9, x9, #272
+    str x9, [sp, #248] // saved sp
+
+    mrs x9, elr_el1
+    str x9, [sp, #256] // pc
+    mrs x9, spsr_el1
+    str x9, [sp, #264] // pstate
+
+    mov x0, sp
+    bl handle_irq
+
+    // Load new PC and PSTATE
+    ldr x9, [sp, #256] // pc
+    msr elr_el1, x9
+    ldr x9, [sp, #264] // pstate
+    msr spsr_el1, x9
+
+    // We need to restore all registers and switch SP
+    // This is tricky: we need to switch SP but also restore all regs including x17/x18
+
+    // Save current context frame pointer
+    mov x9, sp
+
+    // Load and switch to new SP first
+    ldr x10, [x9, #248]
+    mov sp, x10
+
+    // Now restore all registers from saved context (x9 still points to old frame)
+    ldp x0, x1, [x9, #0]
+    ldp x2, x3, [x9, #16]
+    ldp x4, x5, [x9, #32]
+    ldp x6, x7, [x9, #48]
+    ldr x8, [x9, #64]
+    // Skip x9, x10 for now
+    ldp x11, x12, [x9, #88]
+    ldp x13, x14, [x9, #104]
+    ldp x15, x16, [x9, #120]
+    ldp x17, x18, [x9, #136]
+    ldp x19, x20, [x9, #152]
+    ldp x21, x22, [x9, #168]
+    ldp x23, x24, [x9, #184]
+    ldp x25, x26, [x9, #200]
+    ldp x27, x28, [x9, #216]
+    ldp x29, x30, [x9, #232]
+
+    // Finally restore x9 and x10
+    ldp x9, x10, [x9, #64]
+
+    eret
+
+// Stubs for other handlers
+sync_handler_sp0:
+sync_handler_spx:
+    mrs x9, esr_el1
+    lsr x9, x9, #26
+    cmp x9, #0x15 // SVC instruction
+    b.eq svc_handler
+
+    // Not an SVC, treat as a generic sync exception
     stp x29, x30, [sp, #-16]!
     bl handle_sync_exception
     ldp x29, x30, [sp], #16
     eret
 
-irq_handler:
+sync_handler_lower_aarch64:
+sync_handler_lower_aarch32:
     stp x29, x30, [sp, #-16]!
-    stp x0, x1, [sp, #-16]!
-    stp x2, x3, [sp, #-16]!
-    stp x4, x5, [sp, #-16]!
-    stp x6, x7, [sp, #-16]!
-    stp x8, x9, [sp, #-16]!
-    stp x10, x11, [sp, #-16]!
-    stp x12, x13, [sp, #-16]!
-    stp x14, x15, [sp, #-16]!
-    stp x16, x17, [sp, #-16]!
-    stp x18, x19, [sp, #-16]!
-    stp x20, x21, [sp, #-16]!
-    stp x22, x23, [sp, #-16]!
-    stp x24, x25, [sp, #-16]!
-    stp x26, x27, [sp, #-16]!
-    stp x28, xzr, [sp, #-16]!
-    
-    bl handle_irq
-    
-    ldp x28, xzr, [sp], #16
-    ldp x26, x27, [sp], #16
-    ldp x24, x25, [sp], #16
-    ldp x22, x23, [sp], #16
-    ldp x20, x21, [sp], #16
-    ldp x18, x19, [sp], #16
-    ldp x16, x17, [sp], #16
-    ldp x14, x15, [sp], #16
-    ldp x12, x13, [sp], #16
-    ldp x10, x11, [sp], #16
-    ldp x8, x9, [sp], #16
-    ldp x6, x7, [sp], #16
-    ldp x4, x5, [sp], #16
-    ldp x2, x3, [sp], #16
-    ldp x0, x1, [sp], #16
+    bl handle_sync_exception
     ldp x29, x30, [sp], #16
     eret
 
-fiq_handler:
+svc_handler:
+    sub sp, sp, #272 // sizeof(cpu_context_t)
+    stp x0, x1, [sp, #0]
+    stp x2, x3, [sp, #16]
+    stp x4, x5, [sp, #32]
+    stp x6, x7, [sp, #48]
+    stp x8, x9, [sp, #64]
+    stp x10, x11, [sp, #80]
+    stp x12, x13, [sp, #96]
+    stp x14, x15, [sp, #112]
+    stp x16, x17, [sp, #128]
+    stp x18, x19, [sp, #144]
+    stp x20, x21, [sp, #160]
+    stp x22, x23, [sp, #176]
+    stp x24, x25, [sp, #192]
+    stp x26, x27, [sp, #208]
+    stp x28, x29, [sp, #224]
+    str x30, [sp, #240]
+
+    mov x9, sp
+    add x9, x9, #272
+    str x9, [sp, #248] // saved sp
+
+    mrs x9, elr_el1
+    str x9, [sp, #256] // pc
+    mrs x9, spsr_el1
+    str x9, [sp, #264] // pstate
+
+    mov x0, sp
+    bl handle_svc
+
+    ldp x0, x1, [sp, #0]
+    ldp x2, x3, [sp, #16]
+    ldp x4, x5, [sp, #32]
+    ldp x6, x7, [sp, #48]
+    ldp x8, x9, [sp, #64]
+    ldp x10, x11, [sp, #80]
+    ldp x12, x13, [sp, #96]
+    ldp x14, x15, [sp, #112]
+    ldp x16, x17, [sp, #128]
+    ldp x18, x19, [sp, #144]
+    ldp x20, x21, [sp, #160]
+    ldp x22, x23, [sp, #176]
+    ldp x24, x25, [sp, #192]
+    ldp x26, x27, [sp, #208]
+    ldp x28, x29, [sp, #224]
+    ldr x30, [sp, #240]
+
+    ldr x9, [sp, #256] // pc
+    msr elr_el1, x9
+    ldr x9, [sp, #264] // pstate
+    msr spsr_el1, x9
+
+    add sp, sp, #272
+    eret
+
+irq_handler_sp0:
+irq_handler_lower_aarch64:
+irq_handler_lower_aarch32:
+    b irq_handler_spx
+
+fiq_handler_sp0:
+fiq_handler_spx:
+fiq_handler_lower_aarch64:
+fiq_handler_lower_aarch32:
     stp x29, x30, [sp, #-16]!
     bl handle_fiq
     ldp x29, x30, [sp], #16
     eret
 
-serror_handler:
+serror_handler_sp0:
+serror_handler_spx:
+serror_handler_lower_aarch64:
+serror_handler_lower_aarch32:
     stp x29, x30, [sp, #-16]!
     bl handle_serror
     ldp x29, x30, [sp], #16

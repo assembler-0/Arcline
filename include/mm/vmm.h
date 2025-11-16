@@ -1,20 +1,20 @@
 #ifndef ARCLINE_MM_VMM_H
 #define ARCLINE_MM_VMM_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // VMM design choice: RB-tree for VMA management (kernel space for now)
 // Rationale: O(log n) insert/find/remove, good fragmentation control.
 
 // Mapping attributes (subset; extended later when MMU is enabled)
-#define VMM_ATTR_R        (1u << 0)
-#define VMM_ATTR_W        (1u << 1)
-#define VMM_ATTR_X        (1u << 2)
-#define VMM_ATTR_DEVICE   (1u << 3)  // Device-nGnRE when MMU is active
-#define VMM_ATTR_NORMAL   (1u << 4)  // Normal memory (cacheable)
-#define VMM_ATTR_UXN      (1u << 5)  // Unprivileged eXecute-Never (future)
-#define VMM_ATTR_PXN      (1u << 6)  // Privileged eXecute-Never (future)
+#define VMM_ATTR_R (1u << 0)
+#define VMM_ATTR_W (1u << 1)
+#define VMM_ATTR_X (1u << 2)
+#define VMM_ATTR_DEVICE (1u << 3) // Device-nGnRE when MMU is active
+#define VMM_ATTR_NORMAL (1u << 4) // Normal memory (cacheable)
+#define VMM_ATTR_UXN (1u << 5)    // Unprivileged eXecute-Never (future)
+#define VMM_ATTR_PXN (1u << 6)    // Privileged eXecute-Never (future)
 
 // Minimal VMM scaffolding (Stage 0): identity helpers
 
@@ -24,7 +24,8 @@ void vmm_init_identity(void);
 
 // Planned full VMM API (initial implementation without enabling MMU yet)
 // Returns 0 on success, negative on error.
-int vmm_init(void); // create kernel page tables and VMA tree (MMU kept off for now)
+int vmm_init(
+    void); // create kernel page tables and VMA tree (MMU kept off for now)
 int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs);
 int vmm_unmap(uint64_t va, uint64_t size);
 int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs);

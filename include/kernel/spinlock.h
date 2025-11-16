@@ -9,30 +9,24 @@ typedef struct {
 
 #define SPINLOCK_INIT {0}
 
-static inline void spinlock_init(spinlock_t *lock) {
-    lock->lock = 0;
-}
+static inline void spinlock_init(spinlock_t *lock) { lock->lock = 0; }
 
 static inline void spinlock_lock(spinlock_t *lock) {
     uint32_t tmp;
-    __asm__ volatile(
-        "1: ldaxr %w0, [%1]\n"
-        "   cbnz %w0, 1b\n"
-        "   stxr %w0, %w2, [%1]\n"
-        "   cbnz %w0, 1b\n"
-        : "=&r"(tmp)
-        : "r"(&lock->lock), "r"(1)
-        : "memory"
-    );
+    __asm__ volatile("1: ldaxr %w0, [%1]\n"
+                     "   cbnz %w0, 1b\n"
+                     "   stxr %w0, %w2, [%1]\n"
+                     "   cbnz %w0, 1b\n"
+                     : "=&r"(tmp)
+                     : "r"(&lock->lock), "r"(1)
+                     : "memory");
 }
 
 static inline void spinlock_unlock(spinlock_t *lock) {
-    __asm__ volatile(
-        "stlr %w1, [%0]\n"
-        :
-        : "r"(&lock->lock), "r"(0)
-        : "memory"
-    );
+    __asm__ volatile("stlr %w1, [%0]\n"
+                     :
+                     : "r"(&lock->lock), "r"(0)
+                     : "memory");
 }
 
 static inline uint64_t spinlock_lock_irqsave(spinlock_t *lock) {
@@ -43,9 +37,10 @@ static inline uint64_t spinlock_lock_irqsave(spinlock_t *lock) {
     return flags;
 }
 
-static inline void spinlock_unlock_irqrestore(spinlock_t *lock, uint64_t flags) {
+static inline void spinlock_unlock_irqrestore(spinlock_t *lock,
+                                              uint64_t flags) {
     spinlock_unlock(lock);
-    __asm__ volatile("msr daif, %0" :: "r"(flags) : "memory");
+    __asm__ volatile("msr daif, %0" ::"r"(flags) : "memory");
 }
 
 #endif

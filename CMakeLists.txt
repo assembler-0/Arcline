@@ -6,6 +6,10 @@ project(Arcline
     HOMEPAGE_URL "https://github.com/assembler-0/Arcline"
 )
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(WARNING "Release build for this stage may cause printk driver to malfunction")
+endif()
+
 # --- Toolchain and Target ---
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
@@ -22,7 +26,7 @@ set(CMAKE_LINKER clang)
 # --- Compiler and Linker Flags ---
 set(TARGET_ARCH "aarch64-elf")
 
-set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
+set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -fsanitize=bounds,null,return,vla-bound -fstack-protector-all -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
 set(CMAKE_ASM_FLAGS "-target ${TARGET_ARCH} -mcpu=cortex-a57")
 
 # Linker script and configurable kernel load address
@@ -57,6 +61,7 @@ add_subdirectory(mm)
 add_subdirectory(fs)
 add_subdirectory(drivers)
 add_subdirectory(lib)
+add_subdirectory(san)
 
 # --- CMake Modules ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
