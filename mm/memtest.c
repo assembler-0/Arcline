@@ -219,8 +219,7 @@ static int test_vmalloc_fragmentation(void) {
     vfree(b1, 4096);
     vfree(b3, 4096);
     vfree(b4, 8192);
-    
-    printk(" PASS\n");
+
     return 0;
 }
 
@@ -260,7 +259,6 @@ static int test_memory_isolation(void) {
 }
 
 int memtest_run(void) {
-    printk("\n=== Memory Subsystem Test ===\n");
     
     size_t free_before = pmm_free_pages_count();
     
@@ -289,12 +287,6 @@ int memtest_run(void) {
     }
     
     vmalloc_stats();
-    
-    if (failed > 0) {
-        printk("\n=== FAILED: %d test(s) ===\n\n", failed);
-    } else {
-        printk("\n=== ALL TESTS PASSED ===\n\n");
-    }
     
     return failed == 0 ? 0 : -1;
 }

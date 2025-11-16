@@ -3,6 +3,7 @@
 #include <drivers/gic.h>
 #include <kernel/irq.h>
 #include <kernel/printk.h>
+#include <kernel/task.h>
 
 #define TIMER_IRQ 30
 
@@ -32,9 +33,11 @@ static inline void write_cntp_ctl(uint32_t val) {
 static void timer_irq_handler(int irq, void *dev) {
     (void)irq;
     (void)dev;
-    
+
     jiffies++;
-    
+
+    schedule();
+
     write_cntp_tval(timer_freq / 100);
 
     if (jiffies % 100 == 0) {

@@ -241,7 +241,7 @@ void vmalloc_stats(void) {
     }
     
     uint64_t used = vmalloc_next - VMALLOC_START;
-    uint64_t total = VMALLOC_END - VMALLOC_START;
+    // uint64_t total = VMALLOC_END - VMALLOC_START;
     
     printk("vmalloc: used=%llu KB, free=%llu KB, blocks=%d\n",
            used / 1024, total_free / 1024, block_count);
