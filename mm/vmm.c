@@ -154,44 +154,73 @@ static int overlaps(vma_node_t *n, uint64_t va, uint64_t size) {
     return !(b1 <= a0 || a1 <= b0);
 }
 
-// For now, allocate VMA nodes from a simple static pool to avoid PMM dependency cycles
-#define VMA_POOL_CAP 128
+#define VMA_POOL_CAP 256
 static vma_node_t vma_pool[VMA_POOL_CAP];
-static size_t vma_pool_used = 0;
+static vma_node_t *vma_free_list = NULL;
+
+static void init_vma_pool(void) {
+    for (int i = 0; i < VMA_POOL_CAP; i++) {
+        vma_pool[i].left = vma_free_list;
+        vma_free_list = &vma_pool[i];
+    }
+}
+
 static vma_node_t* vma_alloc_node(void) {
-    if (vma_pool_used >= VMA_POOL_CAP) return NULL;
-    vma_node_t *n = &vma_pool[vma_pool_used++];
-    // zero minimal fields
-    n->left = n->right = n->parent = NULL; n->color = RB_RED;
+    if (!vma_free_list) {
+        static int initialized = 0;
+        if (!initialized) {
+            init_vma_pool();
+            initialized = 1;
+        }
+        if (!vma_free_list) return NULL;
+    }
+    vma_node_t *n = vma_free_list;
+    vma_free_list = n->left;
+    n->left = n->right = n->parent = NULL;
+    n->color = RB_RED;
     return n;
 }
+
 static void vma_free_node(vma_node_t *n) {
-    (void)n; // no-op for static pool; could add a free list later
+    if (!n) return;
+    n->left = vma_free_list;
+    vma_free_list = n;
 }
 
 void vmm_init_identity(void) { /* placeholder for future page tables */ }
 
 int vmm_init(void) {
     vma_root = NULL;
-    vma_pool_used = 0;
+    init_vma_pool();
     return 0;
+}
+
+static vma_node_t* find_ge(vma_node_t *root, uint64_t va) {
+    vma_node_t *res = NULL;
+    while (root) {
+        if (va <= root->va) { res = root; root = root->left; }
+        else root = root->right;
+    }
+    return res;
+}
+
+static vma_node_t* find_exact(vma_node_t *root, uint64_t va) {
+    while (root) {
+        if (va < root->va) root = root->left;
+        else if (va > root->va) root = root->right;
+        else return root;
+    }
+    return NULL;
 }
 
 int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
     if (size == 0) return -1;
     if ((va & (VMM_PAGE_SIZE-1)) || (pa & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
+    
     vma_node_t *pred = find_le(vma_root, va);
     if (overlaps(pred, va, size)) return -3;
-    vma_node_t *succ = pred;
-    if (succ) {
-        vma_node_t *cur = vma_root; vma_node_t *best = NULL;
-        while (cur) {
-            if (cur->va > va) { best = cur; cur = cur->left; } else cur = cur->right;
-        }
-        succ = best;
-    } else {
-        succ = tree_min(vma_root);
-    }
+    
+    vma_node_t *succ = find_ge(vma_root, va);
     if (overlaps(succ, va, size)) return -3;
 
     vma_node_t *n = vma_alloc_node();
@@ -232,12 +261,8 @@ int vmm_map(uint64_t va, uint64_t pa, uint64_t size, uint32_t attrs) {
 int vmm_unmap(uint64_t va, uint64_t size) {
     if (size == 0) return -1;
     if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    vma_node_t *cur = vma_root;
-    while (cur) {
-        if (va < cur->va) cur = cur->left;
-        else if (va > cur->va) cur = cur->right;
-        else break;
-    }
+    
+    vma_node_t *cur = find_exact(vma_root, va);
     if (!cur || cur->size != size) return -3;
 
     uint64_t ttbr1 = mmu_get_ttbr1();
@@ -256,12 +281,8 @@ int vmm_unmap(uint64_t va, uint64_t size) {
 int vmm_protect(uint64_t va, uint64_t size, uint32_t attrs) {
     if (size == 0) return -1;
     if ((va & (VMM_PAGE_SIZE-1)) || (size & (VMM_PAGE_SIZE-1))) return -2;
-    vma_node_t *cur = vma_root;
-    while (cur) {
-        if (va < cur->va) cur = cur->left;
-        else if (va > cur->va) cur = cur->right;
-        else break;
-    }
+    
+    vma_node_t *cur = find_exact(vma_root, va);
     if (!cur || cur->size != size) return -3;
     cur->attrs = attrs;
     

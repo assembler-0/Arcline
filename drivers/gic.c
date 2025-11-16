@@ -20,9 +20,9 @@ static volatile uint32_t *gicd_base = NULL;
 static volatile uint32_t *gicc_base = NULL;
 static int gic_version = 0;
 
-static inline uint32_t gicd_read(uint32_t offset) {
-    return gicd_base[offset / 4];
-}
+// static inline uint32_t gicd_read(uint32_t offset) {
+//     return gicd_base[offset / 4];
+// }
 
 static inline void gicd_write(uint32_t offset, uint32_t val) {
     gicd_base[offset / 4] = val;

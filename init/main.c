@@ -10,6 +10,18 @@
 #include <kernel/irq.h>
 #include <drivers/gic.h>
 #include <drivers/timer.h>
+#include <mm/memtest.h>
+#include <kernel/sched/task.h>
+#include <kernel/sched/eevdf.h>
+
+void proc(int argc, char** argv, char** envp) {
+    (void)envp;
+    printk("Task test argc=%d\n", argc);
+    for (int i = 0; i < argc; i++) {
+        printk(" argv[%d] = %s\n", i, argv[i]);
+    }
+    task_exit(0);
+}
 
 void kmain(void) {
     serial_init();
@@ -55,16 +67,31 @@ void kmain(void) {
             (int)(mem_size / (1024*1024)));
     }
 
+    // Run memory tests
+    if (memtest_run() != 0) {
+        panic("Memory tests failed");
+    }
+    
     // Initialize interrupt subsystem
     exception_init();
     irq_init();
     gic_init();
     timer_init(100);
 
-    // etc.
     vmm_dump();
 
-    printk("IRQ: Enabling interrupts...\n");
+    task_init();
+
+    task_args args = {
+        .argc = 2,
+        .argv = (char*[]){"task_print", "arg1"},
+        .envp = NULL
+    };
+    task_create(proc, 0, &args);
+    
+    printk("Created test task\n");
+
+    printk("\nIRQ: enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
 
     // Loop forever
