@@ -30,12 +30,12 @@ void irq_uninstall_handler(int irq) {
     irq_table[irq].dev = NULL;
 }
 
-void irq_dispatch(int irq) {
+void irq_dispatch(cpu_context_t *ctx, int irq) {
     if (irq < 0 || irq >= MAX_IRQS)
         return;
 
     if (irq_table[irq].handler) {
-        irq_table[irq].handler(irq, irq_table[irq].dev);
+        irq_table[irq].handler(ctx, irq, irq_table[irq].dev);
     }
 }
 

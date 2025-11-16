@@ -1,6 +1,5 @@
 #include <kernel/panic.h>
-#include <kernel/printk.h>
-#include <stdint.h>
+#include <kernel/types.h>
 
 #define ESR_EC_SHIFT 26
 #define ESR_EC_MASK 0x3F

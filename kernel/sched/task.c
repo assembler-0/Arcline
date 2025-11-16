@@ -82,7 +82,7 @@ task_t *task_create(void (*entry)(int argc, char **argv, char **envp),
         task->context.x23 = 0;
         task->context.x29 = 0;
         task->context.x30 = (uint64_t)task_exit;
-        task->context.pstate = 0x3C5;
+        task->context.pstate = 0x345;
 
         eevdf_enqueue(task);
     }

@@ -1,9 +1,8 @@
-#include <drivers/gic.h>
 #include <drivers/timer.h>
 #include <kernel/irq.h>
 #include <kernel/printk.h>
 #include <kernel/sched/task.h>
-#include <stddef.h>
+#include <kernel/types.h>
 
 #define TIMER_IRQ 30
 
@@ -32,17 +31,17 @@ static inline void write_cntp_ctl(uint32_t val) {
     __asm__ volatile("msr cntp_ctl_el0, %0" ::"r"((uint64_t)val));
 }
 
-static void timer_irq_handler(int irq, void *dev) {
+static void timer_irq_handler(cpu_context_t *ctx, int irq, void *dev) {
     (void)irq;
     (void)dev;
 
     jiffies++;
 
-    schedule();
+    schedule_preempt(ctx);
 
     write_cntp_tval(timer_freq / 100);
 
-    if (jiffies % 100 == 0) {
+    if (jiffies % 10 == 0) {
         printk(".");
     }
 }

@@ -15,11 +15,15 @@
 
 void proc(int argc, char **argv, char **envp) {
     (void)envp;
-    printk("Task test argc=%d\n", argc);
-    for (int i = 0; i < argc; i++) {
-        printk(" argv[%d] = %s\n", i, argv[i]);
+    while (1) {
+        printk("Task %s: ", argv[0]);
+        for (int i = 1; i < argc; i++) {
+            printk("%s ", argv[i]);
+        }
+        printk("\n");
+        for (volatile int i = 0; i < 1000000; i++)
+            ; // Simple delay
     }
-    task_exit(0);
 }
 
 void kmain(void) {
@@ -81,11 +85,20 @@ void kmain(void) {
 
     task_init();
 
-    task_args args = {
-        .argc = 2, .argv = (char *[]){"task_print", "arg1"}, .envp = NULL};
-    task_create(proc, 0, &args);
+    task_args args1 = {
+        .argc = 2, .argv = (char *[]){"TaskA", "Hello"}, .envp = NULL};
+    task_create(proc, 0, &args1);
 
-    printk("Created test task\n");
+    task_args args2 = {
+        .argc = 2, .argv = (char *[]){"TaskB", "World"}, .envp = NULL};
+    task_create(proc, 0, &args2);
+
+    task_args args3 = {
+        .argc = 2, .argv = (char *[]){"TaskC", "From Gemini"}, .envp = NULL};
+    task_create(proc, 0, &args3);
+
+
+    printk("Created test tasks\n");
 
     printk("\nIRQ: enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
