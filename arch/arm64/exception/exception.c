@@ -1,4 +1,6 @@
 #include <kernel/panic.h>
+#include <kernel/sched/task.h>
+#include <kernel/syscall.h>
 #include <kernel/types.h>
 
 #define ESR_EC_SHIFT 26
@@ -6,6 +8,13 @@
 
 #define EC_DATA_ABORT_SAME 0x25
 #define EC_INSTR_ABORT_SAME 0x21
+
+void handle_svc(cpu_context_t *ctx) {
+    uint64_t syscall_num = ctx->x8;
+    uint64_t ret = do_syscall(syscall_num, ctx->x0, ctx->x1, ctx->x2, ctx->x3,
+                                ctx->x4, ctx->x5);
+    ctx->x0 = ret;
+}
 
 void handle_sync_exception(void) {
     uint64_t esr, far, elr;

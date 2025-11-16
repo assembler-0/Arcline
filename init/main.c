@@ -12,19 +12,9 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <version.h>
+#include <unistd.h>
 
-void proc(int argc, char **argv, char **envp) {
-    (void)envp;
-    while (1) {
-        printk("Task %s: ", argv[0]);
-        for (int i = 1; i < argc; i++) {
-            printk("%s ", argv[i]);
-        }
-        printk("\n");
-        for (volatile int i = 0; i < 1000000; i++)
-            ; // Simple delay
-    }
-}
+#include "kernel/syscall.h"
 
 void kmain(void) {
     serial_init();
@@ -82,23 +72,7 @@ void kmain(void) {
     timer_init(100);
 
     vmm_dump();
-
     task_init();
-
-    task_args args1 = {
-        .argc = 2, .argv = (char *[]){"TaskA", "Hello"}, .envp = NULL};
-    task_create(proc, 0, &args1);
-
-    task_args args2 = {
-        .argc = 2, .argv = (char *[]){"TaskB", "World"}, .envp = NULL};
-    task_create(proc, 0, &args2);
-
-    task_args args3 = {
-        .argc = 2, .argv = (char *[]){"TaskC", "From Gemini"}, .envp = NULL};
-    task_create(proc, 0, &args3);
-
-
-    printk("Created test tasks\n");
 
     printk("\nIRQ: enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");

@@ -12,6 +12,16 @@ static task_t *task_list = NULL;
 
 extern void switch_to(cpu_context_t *prev, cpu_context_t *next);
 
+static void idle_task_entry(int argc, char **argv, char **envp) {
+    (void)argc;
+    (void)argv;
+    (void)envp;
+    // Idle task just waits for interrupts
+    while (1) {
+        __asm__ volatile("wfe");
+    }
+}
+
 static void task_entry_wrapper(void) {
     task_t *task = task_current();
     void (*entry)(int, char **, char **) = (void *)task->context.x19;
@@ -27,11 +37,13 @@ void task_init(void) {
     pid_init();
     eevdf_init();
 
-    task_t *idle = task_create(NULL, 0, NULL);
+    task_t *idle = task_create(idle_task_entry, 0, NULL);
     if (!idle)
         panic("Failed to create idle task");
 
     idle->pid = 0;
+    // Remove idle from queue and set as current running task
+    eevdf_dequeue(idle);
     idle->state = TASK_RUNNING;
     current_task = idle;
 
@@ -111,3 +123,49 @@ void task_exit(int code) {
 task_t *task_current(void) { return current_task; }
 
 void task_set_current(task_t *task) { current_task = task; }
+
+task_t *task_find_by_pid(int pid) {
+    task_t *p = task_list;
+    while (p) {
+        if (p->pid == pid)
+            return p;
+        p = p->next;
+    }
+    return NULL;
+}
+
+int task_kill(task_t *task) {
+    if (!task)
+        return -1;
+
+    // Cannot kill the idle task
+    if (task->pid == 0)
+        return -1;
+
+    printk("[KILL] Killing PID %d (state=%d)\n", task->pid, task->state);
+
+    // Remove from scheduler queue ONLY if it's in the queue (READY state)
+    if (task->state == TASK_READY) {
+        eevdf_dequeue(task);
+    }
+
+    task->state = TASK_ZOMBIE;
+    pid_free(task->pid);
+
+    // Remove from task list
+    if (task->prev)
+        task->prev->next = task->next;
+    if (task->next)
+        task->next->prev = task->prev;
+    if (task == task_list)
+        task_list = task->next;
+
+    // a more robust implementation would free the stack and other resources,
+    // but for now, we just make it a zombie.
+
+    // Note: We don't schedule here even if killing current task,
+    // because this might be called from a syscall, and the syscall
+    // handler will take care of rescheduling if needed.
+
+    return 0;
+}

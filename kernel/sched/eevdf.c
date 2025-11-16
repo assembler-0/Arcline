@@ -1,4 +1,4 @@
-#include <drivers/timer.h>
+#include <kernel/printk.h>
 #include <kernel/sched/eevdf.h>
 #include <string.h>
 
@@ -213,8 +213,10 @@ void eevdf_enqueue(task_t *task) {
     }
 
     eevdf_rb_node_t *node = alloc_node();
-    if (!node)
+    if (!node) {
+        printk("[EEVDF] FAILED to alloc node for PID %d\n", task->pid);
         return;
+    }
 
     node->task = task;
     node->left = node->right = node->parent = NULL;

@@ -51,5 +51,7 @@ task_t *task_current(void);
 void task_set_current(task_t *task);
 void schedule(void);
 void schedule_preempt(cpu_context_t *regs);
+task_t *task_find_by_pid(int pid);
+int task_kill(task_t *task);
 
 #endif // ARCLINE_KERNEL_TASK_H
