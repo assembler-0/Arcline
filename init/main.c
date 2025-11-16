@@ -10,6 +10,8 @@
 #include <kernel/irq.h>
 #include <drivers/gic.h>
 #include <drivers/timer.h>
+#include <mm/vmalloc.h>
+#include <mm/memtest.h>
 
 void kmain(void) {
     serial_init();
@@ -55,16 +57,20 @@ void kmain(void) {
             (int)(mem_size / (1024*1024)));
     }
 
+    // Run memory tests
+    if (memtest_run() != 0) {
+        panic("Memory tests failed");
+    }
+    
     // Initialize interrupt subsystem
     exception_init();
     irq_init();
     gic_init();
     timer_init(100);
 
-    // etc.
     vmm_dump();
-
-    printk("IRQ: Enabling interrupts...\n");
+    
+    printk("\nIRQ: Enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
 
     // Loop forever

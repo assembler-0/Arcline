@@ -11,6 +11,7 @@ set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 set(CMAKE_C_COMPILER clang)
+set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_ASM_COMPILER clang)
 set(CMAKE_AR "llvm-ar")
 set(CMAKE_RANLIB "llvm-ranlib")
@@ -34,8 +35,6 @@ set(KERNEL_LOAD_ADDR "0x40080000" CACHE STRING "Kernel load/entry address (e.g.,
 set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined -Wl,-defsym=KERNEL_LOAD_ADDR=${KERNEL_LOAD_ADDR}")
 
 # --- VMM higher-half kernel base (virtual address) ---
-# This is only a configuration constant for now. The MMU is not enabled yet.
-# For 48-bit VA (common on AArch64), a typical higher-half base is 0xFFFFFF8000000000.
 set(KERNEL_VIRT_BASE "0xFFFFFF8000000000" CACHE STRING "Kernel higher-half virtual base (e.g., 0xFFFFFF8000000000 for 48-bit VA)")
 
 # --- Executable ---
@@ -67,7 +66,6 @@ include(ccache)
 add_custom_command(
     TARGET arcline.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary arcline.elf arcline.bin
-    COMMENT "Creating kernel binary: arcline.bin"
 )
 
 # --- Custom run target ---

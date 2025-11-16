@@ -1,4 +1,4 @@
-// VMM allocator with free-list and guard pages
+// VMM allocator with coalescing free-list and guard pages
 
 #include <mm/vmm.h>
 #include <mm/pmm.h>
@@ -13,36 +13,116 @@ typedef struct free_block {
     uint64_t va;
     uint64_t size;
     struct free_block *next;
+    struct free_block *prev;
 } free_block_t;
 
 static free_block_t *free_list = NULL;
 static uint64_t vmalloc_next = VMALLOC_START;
 
-static free_block_t free_pool[256];
-static int free_pool_used = 0;
+static free_block_t free_pool[512];
+static free_block_t *free_pool_list = NULL;
+
+static void init_pool(void) {
+    for (int i = 0; i < 512; i++) {
+        free_pool[i].next = free_pool_list;
+        free_pool_list = &free_pool[i];
+    }
+}
 
 static free_block_t* alloc_block(void) {
-    if (free_pool_used >= 256) return NULL;
-    return &free_pool[free_pool_used++];
+    if (!free_pool_list) {
+        static int initialized = 0;
+        if (!initialized) {
+            init_pool();
+            initialized = 1;
+        }
+        if (!free_pool_list) return NULL;
+    }
+    free_block_t *blk = free_pool_list;
+    free_pool_list = blk->next;
+    blk->next = blk->prev = NULL;
+    return blk;
+}
+
+static void free_block(free_block_t *blk) {
+    blk->next = free_pool_list;
+    free_pool_list = blk;
+}
+
+static void coalesce_free_list(void) {
+    if (!free_list) return;
+    
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        free_block_t *cur = free_list;
+        while (cur) {
+            free_block_t *next = cur->next;
+            while (next) {
+                if (cur->va + cur->size == next->va) {
+                    cur->size += next->size;
+                    if (cur->prev) cur->prev->next = cur->next;
+                    else free_list = cur->next;
+                    if (cur->next) cur->next->prev = cur->prev;
+                    
+                    if (next->prev) next->prev->next = next->next;
+                    else free_list = next->next;
+                    if (next->next) next->next->prev = next->prev;
+                    
+                    free_block_t *tmp = next->next;
+                    free_block(next);
+                    next = tmp;
+                    changed = 1;
+                } else if (next->va + next->size == cur->va) {
+                    next->size += cur->size;
+                    if (next->prev) next->prev->next = next->next;
+                    else free_list = next->next;
+                    if (next->next) next->next->prev = next->prev;
+                    
+                    if (cur->prev) cur->prev->next = cur->next;
+                    else free_list = cur->next;
+                    if (cur->next) cur->next->prev = cur->prev;
+                    
+                    free_block_t *tmp = next->next;
+                    free_block(cur);
+                    cur = next;
+                    next = tmp;
+                    changed = 1;
+                } else {
+                    next = next->next;
+                }
+            }
+            cur = cur->next;
+        }
+    }
 }
 
 static uint64_t find_free_space(uint64_t size) {
     free_block_t **prev = &free_list;
     free_block_t *cur = free_list;
+    free_block_t *best = NULL;
+    free_block_t **best_prev = NULL;
     
     while (cur) {
-        if (cur->size >= size) {
-            uint64_t va = cur->va;
-            if (cur->size == size) {
-                *prev = cur->next;
-            } else {
-                cur->va += size;
-                cur->size -= size;
-            }
-            return va;
+        if (cur->size >= size && (!best || cur->size < best->size)) {
+            best = cur;
+            best_prev = prev;
         }
         prev = &cur->next;
         cur = cur->next;
+    }
+    
+    if (best) {
+        uint64_t va = best->va;
+        if (best->size == size) {
+            *best_prev = best->next;
+            if (best->next) best->next->prev = best->prev;
+            free_block(best);
+        } else {
+            best->va += size;
+            best->size -= size;
+        }
+        return va;
     }
     
     if (vmalloc_next + size > VMALLOC_END) return 0;
@@ -58,7 +138,11 @@ static void add_free_space(uint64_t va, uint64_t size) {
     blk->va = va;
     blk->size = size;
     blk->next = free_list;
+    blk->prev = NULL;
+    if (free_list) free_list->prev = blk;
     free_list = blk;
+    
+    coalesce_free_list();
 }
 
 void* vmalloc(uint64_t size) {
@@ -143,4 +227,22 @@ void vfree(void *ptr, uint64_t size) {
     }
     
     add_free_space(base_va, total_size);
+}
+
+void vmalloc_stats(void) {
+    uint64_t total_free = 0;
+    int block_count = 0;
+    
+    free_block_t *cur = free_list;
+    while (cur) {
+        total_free += cur->size;
+        block_count++;
+        cur = cur->next;
+    }
+    
+    uint64_t used = vmalloc_next - VMALLOC_START;
+    uint64_t total = VMALLOC_END - VMALLOC_START;
+    
+    printk("vmalloc: used=%llu KB, free=%llu KB, blocks=%d\n",
+           used / 1024, total_free / 1024, block_count);
 }
