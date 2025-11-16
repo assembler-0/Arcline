@@ -10,16 +10,20 @@
 static volatile uint64_t jiffies = 0;
 static uint32_t timer_freq = 0;
 
-static inline uint64_t read_cntpct(void) {
+uint64_t read_cntpct(void) {
     uint64_t val;
     __asm__ volatile("mrs %0, cntpct_el0" : "=r"(val));
     return val;
 }
 
-static inline uint64_t read_cntfrq(void) {
+uint64_t read_cntfrq(void) {
     uint64_t val;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(val));
     return val;
+}
+
+uint64_t get_ns(void) {
+    return read_cntpct() * 1000000000ULL / read_cntfrq();
 }
 
 static inline void write_cntp_tval(uint32_t val) {
@@ -41,7 +45,7 @@ static void timer_irq_handler(int irq, void *dev) {
     write_cntp_tval(timer_freq / 100);
 
     if (jiffies % 100 == 0) {
-        printk("Timer: seconds = %llu\n", jiffies/100);
+        printk(".");
     }
 }
 

@@ -1,13 +1,14 @@
 #include <kernel/sched/task.h>
+#include <kernel/sched/eevdf.h>
 #include <kernel/printk.h>
 #include <kernel/panic.h>
+#include <kernel/pid.h>
 #include <mm/vmalloc.h>
 #include <mm/mmu.h>
 #include <string.h>
 
 static task_t *current_task = NULL;
 static task_t *task_list = NULL;
-static int next_pid = 1;
 
 extern void switch_to(cpu_context_t *prev, cpu_context_t *next);
 
@@ -23,6 +24,9 @@ static void task_entry_wrapper(void) {
 }
 
 void task_init(void) {
+    pid_init();
+    eevdf_init();
+    
     task_t *idle = task_create(NULL, 0, NULL);
     if (!idle) panic("Failed to create idle task");
     
@@ -31,6 +35,7 @@ void task_init(void) {
     current_task = idle;
     
     printk("Task: idle task created (PID 0)\n");
+    printk("EEVDF: scheduler initialized\n");
 }
 
 task_t* task_create(void (*entry)(int argc, char** argv, char** envp),
@@ -42,14 +47,20 @@ task_t* task_create(void (*entry)(int argc, char** argv, char** envp),
     
     memset(task, 0, sizeof(task_t));
     
-    task->pid = next_pid++;
+    task->pid = pid_alloc();
+    if (task->pid < 0) {
+        vfree(task, sizeof(task_t));
+        return NULL;
+    }
     task->state = TASK_READY;
-    task->priority = priority;
-    task->time_slice = 100;
+    task->priority = (priority < EEVDF_MIN_NICE) ? EEVDF_MIN_NICE : 
+                     (priority > EEVDF_MAX_NICE) ? EEVDF_MAX_NICE : priority;
+    task->time_slice = EEVDF_TIME_SLICE_NS;
     task->vruntime = 0;
     
     task->kernel_stack = vmalloc(KERNEL_STACK_SIZE);
     if (!task->kernel_stack) {
+        pid_free(task->pid);
         vfree(task, sizeof(task_t));
         return NULL;
     }
@@ -67,9 +78,12 @@ task_t* task_create(void (*entry)(int argc, char** argv, char** envp),
         task->context.x20 = args ? args->argc : 0;
         task->context.x21 = args ? (uint64_t)args->argv : 0;
         task->context.x22 = args ? (uint64_t)args->envp : 0;
+        task->context.x23 = 0;
         task->context.x29 = 0;
         task->context.x30 = (uint64_t)task_exit;
         task->context.pstate = 0x3C5;
+        
+        eevdf_enqueue(task);
     }
     
     task->next = task_list;
@@ -83,7 +97,9 @@ void task_exit(int code) {
     (void)code;
     if (!current_task) return;
     
+    eevdf_dequeue(current_task);
     current_task->state = TASK_ZOMBIE;
+    pid_free(current_task->pid);
     
     extern void schedule(void);
     schedule();
@@ -97,11 +113,4 @@ void task_set_current(task_t *task) {
     current_task = task;
 }
 
-task_t* task_get_next_ready(void) {
-    task_t *t = task_list;
-    while (t) {
-        if (t->state == TASK_READY) return t;
-        t = t->next;
-    }
-    return NULL;
-}
+

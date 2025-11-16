@@ -20,13 +20,15 @@ typedef struct cpu_context {
     uint64_t pstate;
 } cpu_context_t;
 
+typedef struct task task_t;
+
 typedef struct {
     int argc;
     char **argv;
     char **envp;
 } task_args;
 
-typedef struct task {
+struct task {
     int pid;
     int state;
     int priority;
@@ -37,9 +39,9 @@ typedef struct task {
     void *kernel_stack;
     uint64_t *pgd;
     
-    struct task *next;
-    struct task *prev;
-} task_t;
+    task_t *next;
+    task_t *prev;
+};
 
 void task_init(void);
 task_t* task_create(void (*entry)(int argc, char** argv, char** envp),

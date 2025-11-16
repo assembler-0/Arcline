@@ -12,6 +12,7 @@
 #include <drivers/timer.h>
 #include <mm/memtest.h>
 #include <kernel/sched/task.h>
+#include <kernel/sched/eevdf.h>
 
 void proc(int argc, char** argv, char** envp) {
     (void)envp;
@@ -86,9 +87,11 @@ void kmain(void) {
         .argv = (char*[]){"task_print", "arg1"},
         .envp = NULL
     };
-    task_create(proc, 2, &args);
+    task_create(proc, 0, &args);
+    
+    printk("Created test task\n");
 
-    printk("\nIRQ: Enabling interrupts...\n");
+    printk("\nIRQ: enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
 
     // Loop forever
