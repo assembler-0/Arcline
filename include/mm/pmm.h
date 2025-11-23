@@ -9,10 +9,10 @@
 
 void pmm_init_from_dtb(void);
 
-void* pmm_alloc_pages(size_t count);
-void* pmm_alloc_page(void);
-void  pmm_free_pages(void* addr, size_t count);
-void  pmm_free_page(void* addr);
+void *pmm_alloc_pages(size_t count);
+void *pmm_alloc_page(void);
+void pmm_free_pages(void *addr, size_t count);
+void pmm_free_page(void *addr);
 
 size_t pmm_total_pages(void);
 size_t pmm_free_pages_count(void);

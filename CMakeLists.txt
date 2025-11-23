@@ -6,11 +6,19 @@ project(Arcline
     HOMEPAGE_URL "https://github.com/assembler-0/Arcline"
 )
 
+# Option to enable integration tests
+option(RUN_INTEGRATION_TESTS "Run scheduler integration tests on boot" OFF)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(WARNING "Release build for this stage may cause printk driver to malfunction")
+endif()
+
 # --- Toolchain and Target ---
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 set(CMAKE_C_COMPILER clang)
+set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_ASM_COMPILER clang)
 set(CMAKE_AR "llvm-ar")
 set(CMAKE_RANLIB "llvm-ranlib")
@@ -21,7 +29,7 @@ set(CMAKE_LINKER clang)
 # --- Compiler and Linker Flags ---
 set(TARGET_ARCH "aarch64-elf")
 
-set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
+set(CMAKE_C_FLAGS "-target ${TARGET_ARCH} -fsanitize=bounds,null,return,vla-bound -fstack-protector-all -ffreestanding -nostdlib -Wall -Wextra -g -O0 -mcpu=cortex-a57 -mno-outline-atomics -fno-stack-protector -mgeneral-regs-only")
 set(CMAKE_ASM_FLAGS "-target ${TARGET_ARCH} -mcpu=cortex-a57")
 
 # Linker script and configurable kernel load address
@@ -34,8 +42,6 @@ set(KERNEL_LOAD_ADDR "0x40080000" CACHE STRING "Kernel load/entry address (e.g.,
 set(CMAKE_EXE_LINKER_FLAGS "-target ${TARGET_ARCH} -nostdlib -T ${LINKER_SCRIPT} -fuse-ld=lld -Wl,--no-undefined -Wl,-defsym=KERNEL_LOAD_ADDR=${KERNEL_LOAD_ADDR}")
 
 # --- VMM higher-half kernel base (virtual address) ---
-# This is only a configuration constant for now. The MMU is not enabled yet.
-# For 48-bit VA (common on AArch64), a typical higher-half base is 0xFFFFFF8000000000.
 set(KERNEL_VIRT_BASE "0xFFFFFF8000000000" CACHE STRING "Kernel higher-half virtual base (e.g., 0xFFFFFF8000000000 for 48-bit VA)")
 
 # --- Executable ---
@@ -50,6 +56,12 @@ target_include_directories(arcline.elf PUBLIC
 # Expose the configured higher-half base to C code as VMM_KERNEL_VIRT_BASE
 target_compile_definitions(arcline.elf PUBLIC VMM_KERNEL_VIRT_BASE=${KERNEL_VIRT_BASE})
 
+# Add RUN_INTEGRATION_TESTS definition if enabled
+if(RUN_INTEGRATION_TESTS)
+    target_compile_definitions(arcline.elf PUBLIC RUN_INTEGRATION_TESTS)
+    message(STATUS "Integration tests will run on boot")
+endif()
+
 # --- Subdirectories ---
 add_subdirectory(arch)
 add_subdirectory(init)
@@ -58,6 +70,8 @@ add_subdirectory(mm)
 add_subdirectory(fs)
 add_subdirectory(drivers)
 add_subdirectory(lib)
+add_subdirectory(san)
+add_subdirectory(tests)
 
 # --- CMake Modules ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
@@ -67,7 +81,6 @@ include(ccache)
 add_custom_command(
     TARGET arcline.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary arcline.elf arcline.bin
-    COMMENT "Creating kernel binary: arcline.bin"
 )
 
 # --- Custom run target ---
