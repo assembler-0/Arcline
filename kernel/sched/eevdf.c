@@ -253,6 +253,7 @@ void eevdf_dequeue(task_t *task) {
     if (!task)
         return;
 
+    // Search for the task's node in the runqueue
     eevdf_rb_node_t *node = NULL;
     for (int i = 0; i < 64; i++) {
         if ((node_bitmap[i / 64] & (1ULL << (i % 64))) &&
@@ -262,6 +263,8 @@ void eevdf_dequeue(task_t *task) {
         }
     }
 
+    // Safe for absent tasks: if task is not in queue, return without error
+    // This can happen when dequeue is called on idle task or already-dequeued task
     if (!node)
         return;
 
@@ -406,4 +409,17 @@ void eevdf_set_nice(task_t *task, int nice) {
     if (nice > EEVDF_MAX_NICE)
         nice = EEVDF_MAX_NICE;
     task->priority = nice;
+}
+
+int eevdf_is_queued(task_t *task) {
+    if (!task)
+        return 0;
+    
+    for (int i = 0; i < 64; i++) {
+        if ((node_bitmap[i / 64] & (1ULL << (i % 64))) &&
+            node_pool[i].task == task) {
+            return 1;
+        }
+    }
+    return 0;
 }

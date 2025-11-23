@@ -112,12 +112,19 @@ void task_exit(int code) {
     if (!current_task)
         return;
 
-    eevdf_dequeue(current_task);
+    // Task is RUNNING, not in queue - don't dequeue
     current_task->state = TASK_ZOMBIE;
     pid_free(current_task->pid);
 
+    // Clear current_task before scheduling
+    // schedule() will not return - it will switch to another task
+    task_set_current(NULL);
+    
     extern void schedule(void);
     schedule();
+    
+    // This point should never be reached
+    __builtin_unreachable();
 }
 
 task_t *task_current(void) { return current_task; }
@@ -142,6 +149,10 @@ int task_kill(task_t *task) {
     if (task->pid == 0)
         return -1;
 
+    // Idempotent: if task is already zombie, return success without re-processing
+    if (task->state == TASK_ZOMBIE)
+        return 0;
+
     printk("[KILL] Killing PID %d (state=%d)\n", task->pid, task->state);
 
     // Remove from scheduler queue ONLY if it's in the queue (READY state)
@@ -163,9 +174,18 @@ int task_kill(task_t *task) {
     // a more robust implementation would free the stack and other resources,
     // but for now, we just make it a zombie.
 
-    // Note: We don't schedule here even if killing current task,
-    // because this might be called from a syscall, and the syscall
-    // handler will take care of rescheduling if needed.
+    // If killing current task, reschedule immediately
+    if (task == task_current()) {
+        // Clear current_task before scheduling
+        // schedule() will not return - it will switch to another task
+        task_set_current(NULL);
+        
+        extern void schedule(void);
+        schedule();
+        
+        // This point should never be reached
+        __builtin_unreachable();
+    }
 
     return 0;
 }

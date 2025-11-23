@@ -3,6 +3,7 @@
 #include <kernel/sched/task.h>
 #include <string.h>
 #include <kernel/printk.h>
+#include <kernel/panic.h>
 
 extern void switch_to(cpu_context_t *prev, cpu_context_t *next);
 
@@ -10,10 +11,32 @@ void schedule(void) {
     task_t *prev = task_current();
     uint64_t now = get_ns();
 
-    if (prev && prev->state == TASK_RUNNING) {
-        eevdf_update_curr(prev, now);
-        prev->state = TASK_READY;
-        eevdf_enqueue(prev);
+    // Handle NULL prev case - can happen when current task was killed
+    // and task_set_current(NULL) was called before schedule()
+    // In this case, skip context save and enqueue operations
+    if (prev) {
+        // Only enqueue prev if it was running normally
+        // Zombie tasks are not re-enqueued
+        // Idle task (PID 0) is never enqueued
+        if (prev->state == TASK_RUNNING) {
+            eevdf_update_curr(prev, now);
+            prev->state = TASK_READY;
+            
+            // Only enqueue if not the idle task
+            if (prev->pid != 0) {
+                eevdf_enqueue(prev);
+                
+                // Verify state-queue invariant: READY tasks should be enqueued
+                if (!eevdf_is_queued(prev)) {
+                    panic("schedule: READY task PID %d not in queue after enqueue", prev->pid);
+                }
+            }
+        }
+        
+        // Verify zombie tasks are not in queue
+        if (prev->state == TASK_ZOMBIE && eevdf_is_queued(prev)) {
+            panic("schedule: ZOMBIE task PID %d is in queue", prev->pid);
+        }
     }
 
     task_t *next = eevdf_pick_next();
@@ -21,21 +44,41 @@ void schedule(void) {
         // If no other tasks are runnable, pick the idle task (PID 0)
         next = task_find_by_pid(0);
         if (!next) {
-            // This should ideally not happen if idle task is always enqueued
-            return;
+            panic("No idle task found!");
         }
     }
 
+    // Early return if staying with same task (only if prev is not NULL)
     if (next == prev && prev) {
         if (prev->state == TASK_READY) {
             prev->state = TASK_RUNNING;
             eevdf_dequeue(prev);
+            
+            // Verify state-queue invariant: RUNNING tasks should be dequeued
+            if (eevdf_is_queued(prev)) {
+                panic("schedule: RUNNING task PID %d still in queue after dequeue", prev->pid);
+            }
         }
         return;
     }
 
-    eevdf_dequeue(next);
+    // Only dequeue if not the idle task (PID 0)
+    if (next->pid != 0) {
+        eevdf_dequeue(next);
+        
+        // Verify state-queue invariant: task should be removed from queue
+        if (eevdf_is_queued(next)) {
+            panic("schedule: task PID %d still in queue after dequeue", next->pid);
+        }
+    }
+    
     next->state = TASK_RUNNING;
+    
+    // Verify state-queue invariant: RUNNING tasks should not be in queue
+    if (eevdf_is_queued(next)) {
+        panic("schedule: RUNNING task PID %d is in queue", next->pid);
+    }
+    
     next->context.x23 = now;
     next->time_slice = eevdf_calc_slice(next);
     task_set_current(next);
@@ -62,15 +105,34 @@ void schedule_preempt(cpu_context_t *regs) {
     if (!prev)
         return;
 
-    // Save context and enqueue if task is still running normally
+    // Only enqueue prev if it was running normally
+    // Zombie tasks are not re-enqueued
+    // Idle task (PID 0) is never enqueued
     if (prev->state == TASK_RUNNING) {
         memcpy(&prev->context, regs, sizeof(cpu_context_t));
         uint64_t now = get_ns();
         eevdf_update_curr(prev, now);
+        
+        // State transition: RUNNING -> READY (must happen before enqueue)
         prev->state = TASK_READY;
-        eevdf_enqueue(prev);
+        
+        // Enqueue happens after state change to READY (but not for idle task)
+        if (prev->pid != 0) {
+            eevdf_enqueue(prev);
+            
+            // Verify state-queue invariant: READY tasks should be enqueued
+            if (!eevdf_is_queued(prev)) {
+                panic("schedule_preempt: READY task PID %d not in queue after enqueue", prev->pid);
+            }
+        }
     } else if (prev->state == TASK_ZOMBIE) {
+        // Zombie task - don't save context or enqueue
         printk("[SCHED] prev PID %d is ZOMBIE\n", prev->pid);
+        
+        // Verify zombie tasks are not in queue
+        if (eevdf_is_queued(prev)) {
+            panic("schedule_preempt: ZOMBIE task PID %d is in queue", prev->pid);
+        }
     }
 
     task_t *next = eevdf_pick_next();
@@ -82,8 +144,7 @@ void schedule_preempt(cpu_context_t *regs) {
             // Prev is zombie/blocked, fall back to idle
             next = task_find_by_pid(0);
             if (!next) {
-                printk("[SCHED] FATAL: No idle task found!\n");
-                return;
+                panic("No idle task found!");
             }
             printk("[SCHED] No tasks in queue, using idle\n");
         }
@@ -92,16 +153,47 @@ void schedule_preempt(cpu_context_t *regs) {
     if (next == prev) {
         // Staying with same task
         if (prev->state == TASK_READY) {
-            prev->state = TASK_RUNNING;
+            // Dequeue happens before state change to RUNNING
             eevdf_dequeue(prev);
+            
+            // Verify task was removed from queue
+            if (eevdf_is_queued(prev)) {
+                panic("schedule_preempt: task PID %d still in queue after dequeue", prev->pid);
+            }
+            
+            // State transition: READY -> RUNNING (must happen after dequeue)
+            prev->state = TASK_RUNNING;
+            
+            // Verify state-queue invariant: RUNNING tasks should not be in queue
+            if (eevdf_is_queued(prev)) {
+                panic("schedule_preempt: RUNNING task PID %d is in queue", prev->pid);
+            }
         }
         return;
     }
 
     // Switch to next task
     uint64_t now = get_ns();
-    eevdf_dequeue(next);
+    
+    // Only dequeue if not the idle task (PID 0)
+    // Dequeue happens before state change to RUNNING
+    if (next->pid != 0) {
+        eevdf_dequeue(next);
+        
+        // Verify task was removed from queue
+        if (eevdf_is_queued(next)) {
+            panic("schedule_preempt: task PID %d still in queue after dequeue", next->pid);
+        }
+    }
+    
+    // State transition: READY -> RUNNING (must happen after dequeue)
     next->state = TASK_RUNNING;
+    
+    // Verify state-queue invariant: RUNNING tasks should not be in queue
+    if (eevdf_is_queued(next)) {
+        panic("schedule_preempt: RUNNING task PID %d is in queue", next->pid);
+    }
+    
     next->context.x23 = now;
     next->time_slice = eevdf_calc_slice(next);
     task_set_current(next);

@@ -16,6 +16,11 @@ void handle_svc(cpu_context_t *ctx) {
     ctx->x0 = ret;
 }
 
+int should_reschedule(void) {
+    task_t *curr = task_current();
+    return (curr && curr->state == TASK_ZOMBIE) ? 1 : 0;
+}
+
 void handle_sync_exception(void) {
     uint64_t esr, far, elr;
     __asm__ volatile("mrs %0, esr_el1" : "=r"(esr));

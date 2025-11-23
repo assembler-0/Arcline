@@ -6,6 +6,9 @@ project(Arcline
     HOMEPAGE_URL "https://github.com/assembler-0/Arcline"
 )
 
+# Option to enable integration tests
+option(RUN_INTEGRATION_TESTS "Run scheduler integration tests on boot" OFF)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(WARNING "Release build for this stage may cause printk driver to malfunction")
 endif()
@@ -53,6 +56,12 @@ target_include_directories(arcline.elf PUBLIC
 # Expose the configured higher-half base to C code as VMM_KERNEL_VIRT_BASE
 target_compile_definitions(arcline.elf PUBLIC VMM_KERNEL_VIRT_BASE=${KERNEL_VIRT_BASE})
 
+# Add RUN_INTEGRATION_TESTS definition if enabled
+if(RUN_INTEGRATION_TESTS)
+    target_compile_definitions(arcline.elf PUBLIC RUN_INTEGRATION_TESTS)
+    message(STATUS "Integration tests will run on boot")
+endif()
+
 # --- Subdirectories ---
 add_subdirectory(arch)
 add_subdirectory(init)
@@ -62,6 +71,7 @@ add_subdirectory(fs)
 add_subdirectory(drivers)
 add_subdirectory(lib)
 add_subdirectory(san)
+add_subdirectory(tests)
 
 # --- CMake Modules ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")

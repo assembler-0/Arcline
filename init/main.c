@@ -7,14 +7,17 @@
 #include <kernel/panic.h>
 #include <kernel/printk.h>
 #include <kernel/sched/task.h>
-#include <mm/memtest.h>
 #include <mm/mmu.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <version.h>
 #include <unistd.h>
+#include <kernel/syscall.h>
 
-#include "kernel/syscall.h"
+#ifdef RUN_INTEGRATION_TESTS
+#include <test/test_scheduler_integration.h>
+#include <test/test_memory_integration.h>
+#endif
 
 void kmain(void) {
     serial_init();
@@ -61,9 +64,11 @@ void kmain(void) {
     }
 
     // Run memory tests
-    if (memtest_run() != 0) {
-        panic("Memory tests failed");
+#ifdef RUN_INTEGRATION_TESTS
+    if (run_memory_integration_tests() != 0) {
+        panic("Memory integration test failed");
     }
+#endif
 
     // Initialize interrupt subsystem
     exception_init();
@@ -76,6 +81,14 @@ void kmain(void) {
 
     printk("\nIRQ: enabling interrupts...\n");
     __asm__ volatile("msr daifclr, #2" ::: "memory");
+
+#ifdef RUN_INTEGRATION_TESTS
+    // Run integration tests
+    printk("\nRunning scheduler integration tests...\n");
+    run_scheduler_integration_tests();
+    printk("\nIntegration tests completed. System will now idle.\n");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+#endif
 
     // Loop forever
     while (1) {

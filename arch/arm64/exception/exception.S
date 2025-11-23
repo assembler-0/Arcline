@@ -96,44 +96,37 @@ irq_handler_spx:
     str x9, [sp, #264] // pstate
 
     mov x0, sp
-    bl handle_irq
+    bl handle_irq  // May call schedule_preempt which modifies context in-place
 
-    // Load new PC and PSTATE
-    ldr x9, [sp, #256] // pc
+    // Restore from (possibly modified) context on stack
+    // Load PC and pstate first
+    ldr x9, [sp, #256] // Load (possibly new) PC
     msr elr_el1, x9
-    ldr x9, [sp, #264] // pstate
+    ldr x9, [sp, #264] // Load (possibly new) pstate
     msr spsr_el1, x9
 
-    // We need to restore all registers and switch SP
-    // This is tricky: we need to switch SP but also restore all regs including x17/x18
+    // Restore all registers from stack (context may have been modified)
+    ldp x0, x1, [sp, #0]
+    ldp x2, x3, [sp, #16]
+    ldp x4, x5, [sp, #32]
+    ldp x6, x7, [sp, #48]
+    ldp x8, x9, [sp, #64]
+    ldp x10, x11, [sp, #80]
+    ldp x12, x13, [sp, #96]
+    ldp x14, x15, [sp, #112]
+    ldp x16, x17, [sp, #128]
+    ldp x18, x19, [sp, #144]
+    ldp x20, x21, [sp, #160]
+    ldp x22, x23, [sp, #176]
+    ldp x24, x25, [sp, #192]
+    ldp x26, x27, [sp, #208]
+    ldp x28, x29, [sp, #224]
+    ldr x30, [sp, #240]
 
-    // Save current context frame pointer
-    mov x9, sp
-
-    // Load and switch to new SP first
-    ldr x10, [x9, #248]
-    mov sp, x10
-
-    // Now restore all registers from saved context (x9 still points to old frame)
-    ldp x0, x1, [x9, #0]
-    ldp x2, x3, [x9, #16]
-    ldp x4, x5, [x9, #32]
-    ldp x6, x7, [x9, #48]
-    ldr x8, [x9, #64]
-    // Skip x9, x10 for now
-    ldp x11, x12, [x9, #88]
-    ldp x13, x14, [x9, #104]
-    ldp x15, x16, [x9, #120]
-    ldp x17, x18, [x9, #136]
-    ldp x19, x20, [x9, #152]
-    ldp x21, x22, [x9, #168]
-    ldp x23, x24, [x9, #184]
-    ldp x25, x26, [x9, #200]
-    ldp x27, x28, [x9, #216]
-    ldp x29, x30, [x9, #232]
-
-    // Finally restore x9 and x10
-    ldp x9, x10, [x9, #64]
+    // Restore SP last: load new SP value, pop context frame, then switch
+    ldr x9, [sp, #248]  // Load (possibly new) SP
+    add sp, sp, #272    // Pop context frame first
+    mov sp, x9          // Then switch to new SP
 
     eret
 
@@ -187,8 +180,26 @@ svc_handler:
     str x9, [sp, #264] // pstate
 
     mov x0, sp
-    bl handle_svc
+    bl handle_svc  // May call sys_exit or sys_kill
 
+    // Check if we need to reschedule (current task became zombie)
+    bl should_reschedule  // Returns 1 if current task is zombie
+    cmp x0, #0
+    b.eq .Lsvc_no_resched
+
+    // Reschedule needed - call schedule_preempt with context
+    mov x0, sp
+    bl schedule_preempt  // Will modify context in-place if switching tasks
+
+.Lsvc_no_resched:
+    // Restore from (possibly modified) context
+    // Load PC and pstate first
+    ldr x9, [sp, #256] // Load (possibly new) PC
+    msr elr_el1, x9
+    ldr x9, [sp, #264] // Load (possibly new) pstate
+    msr spsr_el1, x9
+
+    // Restore all registers from stack
     ldp x0, x1, [sp, #0]
     ldp x2, x3, [sp, #16]
     ldp x4, x5, [sp, #32]
@@ -206,12 +217,11 @@ svc_handler:
     ldp x28, x29, [sp, #224]
     ldr x30, [sp, #240]
 
-    ldr x9, [sp, #256] // pc
-    msr elr_el1, x9
-    ldr x9, [sp, #264] // pstate
-    msr spsr_el1, x9
+    // Restore SP last: load new SP value, pop context frame, then switch
+    ldr x9, [sp, #248]  // Load (possibly new) SP
+    add sp, sp, #272    // Pop context frame first
+    mov sp, x9          // Then switch to new SP
 
-    add sp, sp, #272
     eret
 
 irq_handler_sp0:

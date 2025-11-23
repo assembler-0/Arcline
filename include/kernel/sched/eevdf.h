@@ -39,5 +39,6 @@ task_t *eevdf_pick_next(void);
 void eevdf_update_curr(task_t *task, uint64_t now);
 uint64_t eevdf_calc_slice(task_t *task);
 void eevdf_set_nice(task_t *task, int nice);
+int eevdf_is_queued(task_t *task);
 
 #endif
